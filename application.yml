@@ -1,0 +1,91 @@
+# 文气项目统一配置文件
+version: "1.0.0"
+
+# 数据源配置
+data:
+  source: "data/processed/dataset.json"
+  version: "2026.06.24"
+  shards:
+    enabled: true
+    by: "dynasty"             # dynasty 或 genre
+    preloadAll: false         # 是否启动时加载全部分片
+    lazyLoadOnSearch: true    # 搜索时按需加载
+
+# WASM 配置
+wasm:
+  modulePath: "/wasm/wenqi_core.wasm"
+  initTimeoutMs: 5000
+
+# 渲染配置
+rendering:
+  targetFps: 60
+  maxNodes: 10000
+  maxEdges: 20000
+  lodThresholds: [50, 200, 800]
+
+# 评分算法
+scoring:
+  algorithmVersion: "v1.0"
+  weights:
+    talent: 1.0
+    popularity: 1.0
+    luck: 1.0
+
+# 日志配置
+logging:
+  level: INFO               # DEBUG / INFO / ERROR
+  fileOutput: true
+  filePath: "logs/"
+  retentionDays: 32
+  exportEnabled: true       # 启用日志导出功能
+
+# 持久化配置
+persistence:
+  # 数据集持久化
+  dataset:
+    cache: indexedDB
+    versionKey: "data.version"
+    autoUpdate: true          # 启动时自动检查版本
+
+  # 索引缓存
+  index:
+    cache: indexedDB
+    versionKey: "scoring.algorithmVersion"
+    serialization: bincode    # Rust 二进制序列化
+
+  # 评分缓存
+  scores:
+    cache: indexedDB
+    versionKey: "scoring.algorithmVersion"
+
+  # 视图配置
+  viewConfig:
+    storage: localStorage
+
+  # 存储配额管理
+  quota:
+    checkBeforeWrite: true
+    cleanupPriority:           # 配额不足时清理优先级（高→低）
+      - oldLogs
+      - oldScores
+      - oldIndexCache
+      - datasetCache
+    requestPersist: true       # 请求持久化存储权限
+
+# 字体配置
+font:
+  primary: "Noto Sans SC"
+  fallback: "system-ui, sans-serif"
+
+# 错误重试配置
+error:
+  retry:
+    wasm:
+      maxAttempts: 2
+      intervalMs: 1000
+    data:
+      maxAttempts: 3
+      intervalMs: 2000
+    wasmInit:
+      timeoutMs: 5000
+      warnTimeoutMs: 15000

@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
+    --glass-bg: rgba(0, 0, 0, 0.6);
+    --glass-bg-light: rgba(0, 0, 0, 0.5);
+    --glass-bg-medium: rgba(0, 0, 0, 0.7);
+    --glass-bg-heavy: rgba(0, 0, 0, 0.85);
+    --glass-blur: 12px;
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-radius: 0.75rem;
+    --spacing-3xs: 0.25rem;
+    --spacing-2xs: 0.5rem;
+    --spacing-xs: 0.75rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+  }
+
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    color: rgb(var(--foreground-rgb));
+    background: linear-gradient(
+        to bottom,
+        transparent,
+        rgb(var(--background-end-rgb))
+      )
+      rgb(var(--background-start-rgb));
+  }
+}
+
+@layer components {
+  .glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+  }
+
+  .glass-panel-light {
+    background: var(--glass-bg-light);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+  }
+
+  .glass-panel-medium {
+    background: var(--glass-bg-medium);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+  }
+
+  .glass-panel-heavy {
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+  }
+}
+
+/* 朝代气团色彩 */
+.dynasty-preqin { color: #3A4A5C; }
+.dynasty-han { color: #8B7355; }
+.dynasty-weijin { color: #6FAE8E; }
+.dynasty-tang { color: #D4A24C; }
+.dynasty-song { color: #7BA7D9; }
+.dynasty-yuan { color: #B5523E; }
+.dynasty-ming { color: #C9866B; }
+.dynasty-qing { color: #8C6FAE; }
+.dynasty-modern { color: #5A8C7A; }
+
+/* 减少动效模式 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 高对比度模式 */
+.high-contrast {
+  --foreground-rgb: 255, 255, 255;
+  --background-rgb: 0, 0, 0;
+}
+
+.high-contrast body {
+  background: rgb(var(--background-rgb)) !important;
+}
+
+.high-contrast .bg-black {
+  background-color: #000 !important;
+}
+
+.high-contrast .glass-panel,
+.high-contrast .glass-panel-light,
+.high-contrast .glass-panel-heavy {
+  background-color: #000 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.high-contrast .text-white {
+  color: #fff !important;
+}
+
+.high-contrast .bg-opacity-70,
+.high-contrast .bg-opacity-80,
+.high-contrast .bg-opacity-90 {
+  background-color: rgba(0, 0, 0, 1) !important;
+}
+
+.high-contrast button:focus,
+.high-contrast input:focus {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* 焦点样式 */
+*:focus-visible {
+  outline: 2px solid #4A90D9;
+  outline-offset: 2px;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}

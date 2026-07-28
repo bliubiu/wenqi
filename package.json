@@ -1,0 +1,49 @@
+{
+  "name": "wenqi",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts,.tsx",
+    "format": "prettier --write src/**/*.{ts,tsx}",
+    "data:process": "bun run scripts/process-data.ts",
+    "data:score": "bun run scripts/calculate-scores.ts",
+    "data:index": "bun run scripts/build-index.ts",
+    "data:search": "bun run scripts/build-search-index.ts",
+    "data:all": "bun run scripts/process-data.ts && bun run scripts/calculate-scores.ts && bun run scripts/build-index.ts && bun run scripts/build-search-index.ts && bun run data:sync",
+    "data:sync": "bun -e \"const fs=require('fs');const p=require('path');const s=p.join('data','processed');const d=p.join('public','data','processed');if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});const exclude=new Set(['search-index.json']);for(const f of fs.readdirSync(s)){if(f.endsWith('.json')&&!exclude.has(f)){fs.copyFileSync(p.join(s,f),p.join(d,f));console.log('已同步: '+f);}}\"",
+    "build:wasm": "cd crates/wenqi-core && wasm-pack build --target web --out-dir ../../public/wasm",
+    "postbuild": "bun run data:sync"
+  },
+  "dependencies": {
+    "next": "^16.2.9",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "three": "0.170.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "0.170.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^9.0.0",
+    "fake-indexeddb": "^6.0.0",
+    "jsdom": "^29.1.1",
+    "postcss": "^8.4.0",
+    "prettier": "^3.0.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
