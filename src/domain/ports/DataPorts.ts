@@ -57,6 +57,21 @@ export interface WasmComputePort {
   queryNearby(x: number, y: number, z: number, radius: number): Promise<string[]>;
 }
 
+/** 全文检索命中（作品级，命中后跳转所属诗人节点） */
+export interface FullTextHit {
+  /** 作品 ID（部分索引实现按序号引用，可为空串） */
+  workId?: string;
+  poetId: string;
+  poetName: string;
+  title: string;
+  snippet: string;
+}
+
+/** 全文检索端口：标题 + 名句前缀的轻量索引（由数据底座构建期导出） */
+export interface FullTextSearchPort {
+  search(query: string, limit: number): Promise<FullTextHit[]>;
+}
+
 export interface LoggerPort {
   debug(module: string, message: string, context?: object): void;
   info(module: string, message: string, context?: object): void;

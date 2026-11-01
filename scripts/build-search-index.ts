@@ -1,243 +1,180 @@
+/**
+ * 文气项目全文检索索引构建脚本（方案 B：构建期 FTS5 + 前端轻量检索分片）
+ *
+ * 功能：
+ * 1. 从数据底座（data/wenqi.db）读取全部作品
+ * 2. 构建独立检索库 data/search.db：works 表 + FTS5 虚表（trigram 中文子串检索），
+ *    文本经简体归一化（OpenCC 语料子集），作为召回验证与 `db:search` CLI 的查询底座
+ * 3. 导出前端检索分片 public/data/processed/search/shard-{0..15}.json（v2 格式）：
+ *    - poetId 字典化（dict-poets.json + 序号引用）
+ *    - 条目为 [诗人序号, 归一化小写标题, 归一化小写文本前 16 字]
+ *    - 按作品 ID 哈希分桶，供前端懒加载匹配
+ *
+ * 使用方式：
+ * bun run scripts/build-search-index.ts
+ */
+
+import { Database } from 'bun:sqlite';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
+import * as OpenCC from 'opencc-js';
+import { openDatabase, loadAllWorks, DEFAULT_DB } from './db-core';
+import { toSimplified } from '../src/infrastructure/text/t2s';
 
-const DATA_DIR = path.join(__dirname, '../data/processed');
+const SEARCH_DB = 'data/search.db';
+const OUT_DIR = path.join('public', 'data', 'processed', 'search');
+const SHARD_COUNT = 16;
+/** 前端索引的文本截断长度（名句多在前 16 字内） */
+const TEXT_PREFIX_LEN = 16;
 
-interface Poet {
-  id: string;
-  name: string;
-  dynasty: string;
-  biography: string;
-  workCount: number;
+function log(message: string): void {
+  console.log(`[文气检索] ${message}`);
 }
 
-interface Work {
-  id: string;
-  title: string;
-  poetId: string;
-  poetName: string;
-  dynasty: string;
-  genre: string;
-  text: string;
+function fail(message: string): never {
+  console.error(`[文气检索] 错误: ${message}`);
+  process.exit(1);
 }
 
-interface SearchDocument {
-  id: string;
-  refType: 'POET' | 'WORK';
-  refId: string;
-  title: string;
-  content: string;
-  dynasty: string;
-  genre: string | null;
-  poetName: string | null;
+/** 作品哈希分桶（djb2）：分片路径固定，前端无需索引查询 */
+function shardOf(workId: string): number {
+  let hash = 5381;
+  for (let i = 0; i < workId.length; i++) {
+    hash = ((hash << 5) + hash + workId.charCodeAt(i)) >>> 0;
+  }
+  return hash % SHARD_COUNT;
 }
 
-interface InvertedIndex {
-  [token: string]: string[];
+/* ──── 阶段一：构建 FTS5 检索库（简体归一化） ──── */
+
+function buildSearchDb(works: Array<{ id: string; poetId: string; poetName: string | null; title: string; text: string | null; dynasty: string }>, converter: (s: string) => string): void {
+  const startedAt = Date.now();
+  for (const suffix of ['', '-wal', '-shm']) {
+    const p = SEARCH_DB + suffix;
+    if (fs.existsSync(p)) fs.rmSync(p);
+  }
+  fs.mkdirSync(path.dirname(SEARCH_DB), { recursive: true });
+
+  const db = new Database(SEARCH_DB, { create: true });
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA synchronous = NORMAL');
+
+  // 检索库内容表 + FTS5 虚表（trigram：中文按字符三元组，支持 ≥3 字子串 MATCH）
+  db.exec(`
+    CREATE TABLE works (
+      id TEXT PRIMARY KEY,
+      poet_id TEXT NOT NULL,
+      poet_name TEXT,
+      title TEXT NOT NULL,
+      text TEXT,
+      dynasty TEXT
+    );
+    CREATE VIRTUAL TABLE works_fts USING fts5(
+      title, text,
+      poet_id UNINDEXED, poet_name UNINDEXED, dynasty UNINDEXED,
+      tokenize = 'trigram'
+    );
+  `);
+
+  const insertWork = db.prepare('INSERT INTO works (id, poet_id, poet_name, title, text, dynasty) VALUES (?, ?, ?, ?, ?, ?)');
+  const insertFts = db.prepare('INSERT INTO works_fts (title, text, poet_id, poet_name, dynasty) VALUES (?, ?, ?, ?, ?)');
+  const run = db.transaction((rows: typeof works) => {
+    for (const w of rows) {
+      const title = converter(w.title);
+      const text = converter(w.text ?? '');
+      insertWork.run(w.id, w.poetId, converter(w.poetName ?? ''), title, text, w.dynasty ?? null);
+      insertFts.run(title, text, w.poetId, converter(w.poetName ?? ''), w.dynasty ?? null);
+    }
+  });
+  for (let i = 0; i < works.length; i += 5000) {
+    run(works.slice(i, i + 5000));
+  }
+
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+  db.close();
+  const sizeMB = (fs.statSync(SEARCH_DB).size / 1024 / 1024).toFixed(1);
+  log(`FTS5 检索库构建完成: ${SEARCH_DB}（${works.length} 首，简体归一化，${sizeMB} MB，耗时 ${((Date.now() - startedAt) / 1000).toFixed(1)}s）`);
 }
 
-interface SearchIndexData {
-  documents: SearchDocument[];
-  invertedIndex: InvertedIndex;
-  metadata: {
-    documentCount: number;
-    indexSize: number;
-    buildTime: number;
+/* ──── 阶段二：导出前端检索分片（v2：字典化 + 归一化） ──── */
+
+function exportShards(works: Array<{ id: string; poetId: string; title: string; text: string | null }>, converter: (s: string) => string): void {
+  fs.rmSync(OUT_DIR, { recursive: true, force: true });
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+
+  // 诗人 ID 字典
+  const poetDict = [...new Set(works.map((w) => w.poetId))].sort();
+  const poetIdx = new Map(poetDict.map((id, i) => [id, i]));
+  fs.writeFileSync(path.join(OUT_DIR, 'dict-poets.json'), JSON.stringify({ v: 1, poets: poetDict }), 'utf-8');
+
+  const shards: Array<Array<[number, string, string]>> = Array.from({ length: SHARD_COUNT }, () => []);
+  for (const w of works) {
+    const item: [number, string, string] = [
+      poetIdx.get(w.poetId)!,
+      converter(w.title).toLowerCase(),
+      converter(w.text ?? '').toLowerCase().slice(0, TEXT_PREFIX_LEN),
+    ];
+    shards[shardOf(w.id)].push(item);
+  }
+
+  let total = 0;
+  for (let i = 0; i < SHARD_COUNT; i++) {
+    fs.writeFileSync(
+      path.join(OUT_DIR, `shard-${i}.json`),
+      JSON.stringify({ v: 2, count: shards[i].length, items: shards[i] }),
+      'utf-8'
+    );
+    total += shards[i].length;
+  }
+
+  const manifest = {
+    version: 2,
+    strategy: 'hash-16',
+    normalization: 't2s-opencc-corpus-subset',
+    textPrefixLen: TEXT_PREFIX_LEN,
+    shardCount: SHARD_COUNT,
+    poetDict: 'dict-poets.json',
+    workCount: total,
+    exportedAt: new Date().toISOString(),
   };
+  fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8');
+
+  const sizeMB = (fs.readdirSync(OUT_DIR).reduce((acc, f) => acc + fs.statSync(path.join(OUT_DIR, f)).size, 0) / 1024 / 1024).toFixed(1);
+  log(`前端检索分片导出完成（v2）: ${SHARD_COUNT} 片 / ${total} 首 / 诗人字典 ${poetDict.length} 条，输出目录 ${OUT_DIR}（合计 ${sizeMB} MB）`);
 }
 
-function tokenize(text: string): string[] {
-  const tokens: string[] = [];
+/* ──── 主流程 ──── */
 
-  const cleaned = text.replace(/\s+/g, '');
-
-  const chars = Array.from(cleaned);
-  for (const ch of chars) {
-    if (/[一-龥]/.test(ch)) {
-      tokens.push(ch);
-    }
-  }
-  for (let i = 0; i < chars.length - 1; i++) {
-    if (/[一-龥]/.test(chars[i]) && /[一-龥]/.test(chars[i + 1])) {
-      tokens.push(chars[i] + chars[i + 1]);
-    }
-  }
-
-  return tokens;
-}
-
-function buildInvertedIndex(documents: SearchDocument[]): InvertedIndex {
-  const index: InvertedIndex = {};
-
-  for (const doc of documents) {
-    const text = doc.refType === 'WORK'
-      ? `${doc.title} ${doc.poetName || ''}`
-      : doc.title;
-
-    const tokens = tokenize(text);
-    const uniqueTokens = new Set(tokens);
-
-    for (const token of uniqueTokens) {
-      if (!index[token]) {
-        index[token] = [];
-      }
-      index[token].push(doc.id);
-    }
-  }
-
-  return index;
-}
-
-function main() {
+function main(): void {
   console.log('=== 文气项目全文检索索引构建 ===\n');
 
-  console.log('读取数据...');
-  const poets: Poet[] = JSON.parse(
-    fs.readFileSync(path.join(DATA_DIR, 'poets.json'), 'utf-8')
-  );
-  const works: Work[] = JSON.parse(
-    fs.readFileSync(path.join(DATA_DIR, 'works.json'), 'utf-8')
-  );
-
-  console.log(`  诗人数量: ${poets.length}`);
-  console.log(`  作品数量: ${works.length}`);
-
-  console.log('\n构建搜索文档...');
-  const documents: SearchDocument[] = [];
-
-  for (const poet of poets) {
-    documents.push({
-      id: `doc_poet_${poet.id}`,
-      refType: 'POET',
-      refId: poet.id,
-      title: poet.name,
-      content: '',
-      dynasty: poet.dynasty,
-      genre: null,
-      poetName: null,
-    });
+  if (!fs.existsSync(DEFAULT_DB)) {
+    fail(`数据底座不存在，请先运行数据管道（bun run data:all）：${DEFAULT_DB}`);
   }
 
-  for (const work of works) {
-    const contentSnippet = work.text ? work.text.slice(0, 300) : '';
-    documents.push({
-      id: `doc_work_${work.id}`,
-      refType: 'WORK',
-      refId: work.id,
-      title: work.title,
-      content: contentSnippet,
-      dynasty: work.dynasty,
-      genre: work.genre,
-      poetName: work.poetName,
-    });
-  }
+  const converter = OpenCC.Converter({ from: 't', to: 'cn' });
 
-  console.log(`  文档数量: ${documents.length}`);
+  log(`读取作品数据...`);
+  const db = openDatabase(DEFAULT_DB, { readonly: true });
+  const works = loadAllWorks(db).map((w) => ({
+    id: w.id,
+    poetId: w.poetId,
+    poetName: w.poetName,
+    title: w.title,
+    text: w.text,
+    dynasty: w.dynasty,
+  }));
+  db.close();
+  log(`作品数量: ${works.length}`);
 
-  console.log('\n构建倒排索引...');
-  const startTime = Date.now();
-  const invertedIndex = buildInvertedIndex(documents);
-  const buildTime = Date.now() - startTime;
+  log(`构建 FTS5 检索库...`);
+  buildSearchDb(works, converter);
 
-  const indexSize = Object.keys(invertedIndex).length;
-  console.log(`  索引大小: ${indexSize} 个词条`);
-  console.log(`  构建耗时: ${buildTime}ms`);
-
-  console.log('\n=== 索引统计 ===');
-  let totalDocFreq = 0;
-  let maxDocFreq = 0;
-  let maxDocFreqToken = '';
-
-  for (const [token, docIds] of Object.entries(invertedIndex)) {
-    totalDocFreq += docIds.length;
-    if (docIds.length > maxDocFreq) {
-      maxDocFreq = docIds.length;
-      maxDocFreqToken = token;
-    }
-  }
-
-  const avgDocFreq = totalDocFreq / indexSize;
-  console.log(`  平均文档频率: ${avgDocFreq.toFixed(2)}`);
-  console.log(`  最大文档频率: ${maxDocFreq} (词条: "${maxDocFreqToken}")`);
-
-  console.log('\n示例词条:');
-  const sampleTokens = Object.keys(invertedIndex).slice(0, 10);
-  for (const token of sampleTokens) {
-    console.log(`  "${token}": ${invertedIndex[token].length} 个文档`);
-  }
-
-  console.log('\n=== 测试搜索 ===');
-
-  console.log('\n搜索 "李白":');
-  const libaiTokens = tokenize('李白');
-  const libaiResults = new Set<string>();
-  for (const token of libaiTokens) {
-    if (invertedIndex[token]) {
-      for (const docId of invertedIndex[token]) {
-        libaiResults.add(docId);
-      }
-    }
-  }
-  console.log(`  找到 ${libaiResults.size} 个文档`);
-  const libaiDocs = documents.filter(d => libaiResults.has(d.id)).slice(0, 5);
-  for (const doc of libaiDocs) {
-    console.log(`  - ${doc.title} (${doc.refType === 'POET' ? '诗人' : '作品'})`);
-  }
-
-  console.log('\n搜索 "静夜思":');
-  const jingyeTokens = tokenize('静夜思');
-  const jingyeResults = new Set<string>();
-  for (const token of jingyeTokens) {
-    if (invertedIndex[token]) {
-      for (const docId of invertedIndex[token]) {
-        jingyeResults.add(docId);
-      }
-    }
-  }
-  console.log(`  找到 ${jingyeResults.size} 个文档`);
-  const jingyeDocs = documents.filter(d => jingyeResults.has(d.id)).slice(0, 5);
-  for (const doc of jingyeDocs) {
-    console.log(`  - ${doc.title} (${doc.refType === 'POET' ? '诗人' : '作品'})`);
-  }
-
-  const indexData: SearchIndexData = {
-    documents,
-    invertedIndex,
-    metadata: {
-      documentCount: documents.length,
-      indexSize,
-      buildTime,
-    },
-  };
-
-  console.log('\n保存索引...');
-  fs.writeFileSync(
-    path.join(DATA_DIR, 'search-index.json'),
-    JSON.stringify(indexData),
-    'utf-8'
-  );
-  console.log('  已保存 search-index.json');
-
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(DATA_DIR, 'manifest.json'), 'utf-8')
-  );
-  const existing = new Map(manifest.files.map((f: any) => [f.path, f]));
-  existing.set('search-index.json', {
-    path: 'search-index.json',
-    type: 'search',
-    size: fs.statSync(path.join(DATA_DIR, 'search-index.json')).size,
-    hash: crypto.createHash('sha256').update(fs.readFileSync(path.join(DATA_DIR, 'search-index.json'))).digest('hex'),
-  });
-  manifest.files = Array.from(existing.values());
-  fs.writeFileSync(
-    path.join(DATA_DIR, 'manifest.json'),
-    JSON.stringify(manifest, null, 2),
-    'utf-8'
-  );
-  console.log('  已更新 manifest.json');
+  log(`导出前端检索分片...`);
+  exportShards(works, converter);
 
   console.log('\n=== 构建完成 ===');
 }
 
 main();
+

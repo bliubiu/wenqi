@@ -16,6 +16,7 @@ import { JsonWorkRepository } from '@/infrastructure/data/WorkRepository';
 import { JsonRelationRepository } from '@/infrastructure/data/RelationRepository';
 import { JsonGalaxyRepository } from '@/infrastructure/data/GalaxyRepository';
 import { WasmBridge } from '@/infrastructure/wasm/bridge';
+import { ShardSearchIndex } from '@/infrastructure/search/ShardSearchIndex';
 import { LoggerFactory } from '@/infrastructure/logging/LoggerFactory';
 import { ConsoleLogger } from '@/infrastructure/logging/ConsoleLogger';
 import { IndexedDBLogger } from '@/infrastructure/logging/IndexedDBLogger';
@@ -73,7 +74,7 @@ export class CompositionRoot {
     this.relationService = new RelationService();
 
     this.initializeUseCase = new InitializeUseCase(poetRepo, nodeRepo, scoreRepo, this.wasm);
-    this.searchUseCase = new SearchUseCase(nodeRepo, this.wasm);
+    this.searchUseCase = new SearchUseCase(nodeRepo, this.wasm, new ShardSearchIndex());
     this.focusNodeUseCase = new FocusNodeUseCase(poetRepo, scoreRepo);
     this.unfocusUseCase = new UnfocusUseCase(this.galaxy);
     this.adjustDimensionUseCase = new AdjustDimensionUseCase(this.galaxy, layoutService);

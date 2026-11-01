@@ -5,7 +5,6 @@ import { CompositionRoot } from '@/di/composition-root';
 import { getDynastyName } from '@/domain/value-objects/DynastyCode';
 import { useGalaxyStore } from '@/presentation/store/galaxyStore';
 import { useUIStore } from '@/presentation/store/uiStore';
-import { DataLoader } from '@/infrastructure/data/DataLoader';
 
 interface SearchResultItem {
   id: string;
@@ -63,13 +62,15 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
     try {
       const result = await rootRef.current.searchUseCase.execute(searchQuery);
       for (const node of result) {
+        const isWorkHit = Boolean(node.matchedTitle);
         addResult({
           id: node.id,
           refType: node.refType,
           refId: node.refId,
-          title: node.label,
-          subtitle: `${getDynastyName(node.dynasty)} · ${node.refType === 'POET' ? '诗人' : '作品'}`,
+          title: node.matchedTitle ?? node.label,
+          subtitle: `${getDynastyName(node.dynasty)} · ${isWorkHit ? '作品' : '诗人'}`,
           dynasty: node.dynasty,
+          snippet: node.snippet,
         });
       }
     } catch {
@@ -86,32 +87,6 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
         }
       }
     }
-
-    // 对命中诗人按需加载作品分片，匹配作品标题与文本（分片经 DataLoader 缓存，重复搜索零开销）
-    const matchedPoets = [...new Set(matchedNodes.filter((n) => n.refType === 'POET').map((n) => n.refId))].slice(0, 5);
-    await Promise.all(matchedPoets.map(async (poetId) => {
-      try {
-        const shard = await DataLoader.getInstance().loadWorkShard(poetId);
-        for (const w of shard.works) {
-          if (matchedNodes.length >= 20) break;
-          const matchTitle = w.title.toLowerCase().includes(queryLower);
-          const matchText = (w.text || '').substring(0, 60).toLowerCase().includes(queryLower);
-          if (!matchTitle && !matchText) continue;
-
-          addResult({
-            id: `work_${w.poetId}_${w.title.slice(0, 20)}`,
-            refType: 'POET',
-            refId: w.poetId,
-            title: w.title,
-            subtitle: `${w.poetName} · 作品`,
-            dynasty: w.dynasty,
-            snippet: (w.text || '').substring(0, 80),
-          });
-        }
-      } catch {
-        // 分片加载失败时跳过该诗人的作品匹配
-      }
-    }));
 
     setResults(matchedNodes);
     setSearchOpen(matchedNodes.length > 0);

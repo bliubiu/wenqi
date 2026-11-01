@@ -13,6 +13,9 @@ export interface NodeDTO {
   size: number;
   brightness: number;
   label: string;
+  /** 全文检索命中时的展示信息 */
+  matchedTitle?: string;
+  snippet?: string;
 }
 
 export interface PoetDTO {

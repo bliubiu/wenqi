@@ -47,10 +47,14 @@ function fail(message: string): never {
 function parseArgs(argv: string[]): { cmd: string; options: Record<string, string> } {
   const [cmd = 'help', ...rest] = argv;
   const options: Record<string, string> = {};
+  let firstPositional = true;
   for (let i = 0; i < rest.length; i++) {
     if (rest[i].startsWith('--')) {
       options[rest[i].slice(2)] = rest[i + 1] ?? '';
       i++;
+    } else if (firstPositional) {
+      options._query = rest[i];
+      firstPositional = false;
     }
   }
   return { cmd, options };
@@ -285,6 +289,55 @@ function cmdDump(options: Record<string, string>): void {
   }
 }
 
+/* ──── search：FTS5 召回验证 ──── */
+
+const SEARCH_DB = 'data/search.db';
+
+function cmdSearch(options: Record<string, string>): void {
+  const query = options._query ?? '';
+  const limit = Number(options.limit ?? 10);
+  if (!query) {
+    fail('用法: bun run scripts/db.ts search <关键词> [--limit 10]（≥3 字走 FTS5，更短走 LIKE）');
+  }
+  if (!fs.existsSync(SEARCH_DB)) {
+    fail(`检索库不存在，请先运行 bun run data:search：${SEARCH_DB}`);
+  }
+
+  const db = new Database(SEARCH_DB, { readonly: true });
+  try {
+    let rows: any[];
+    if (query.length >= 3) {
+      // FTS5 trigram 子串检索（含 BM25 排序与摘要高亮）
+      rows = db
+        .query(
+          `SELECT poet_name AS poetName, dynasty, title,
+                  snippet(works_fts, 1, '「', '」', '…', 6) AS excerpt,
+                  bm25(works_fts) AS rank
+           FROM works_fts WHERE works_fts MATCH ?
+           ORDER BY rank LIMIT ?`
+        )
+        .all(query, limit);
+    } else {
+      // trigram 最小 3 字符，更短的查询退化为 LIKE 全扫
+      rows = db
+        .query(
+          `SELECT poet_name AS poetName, dynasty, title,
+                  substr(text, max(1, instr(text, ?) - 4), 30) AS excerpt
+           FROM works_fts WHERE title LIKE ? OR text LIKE ?
+           LIMIT ?`
+        )
+        .all(query, `%${query}%`, `%${query}%`, limit);
+    }
+
+    console.log(`[文气检索] 「${query}」命中 ${rows.length} 条（FTS5 trigram / 检索库 ${SEARCH_DB}）:`);
+    for (const r of rows) {
+      console.log(`[文气检索]   ${r.title} —— ${r.poetName ?? '佚名'}（${r.dynasty ?? ''}）${r.excerpt ? ` ${r.excerpt}` : ''}`);
+    }
+  } finally {
+    db.close();
+  }
+}
+
 /* ──── stats ──── */
 
 function cmdStats(options: Record<string, string>): void {
@@ -327,6 +380,7 @@ function printUsage(): void {
   bun run scripts/db.ts import [--source data/processed] [--db data/wenqi.db]
   bun run scripts/db.ts export [--db data/wenqi.db] [--out public/data/processed]
   bun run scripts/db.ts dump   [--db data/wenqi.db] [--out data/processed]
+  bun run scripts/db.ts search <关键词> [--limit 10]
   bun run scripts/db.ts stats  [--db data/wenqi.db]
 
 快捷命令:
@@ -347,6 +401,9 @@ try {
       break;
     case 'dump':
       cmdDump(options);
+      break;
+    case 'search':
+      cmdSearch(options);
       break;
     case 'stats':
       cmdStats(options);

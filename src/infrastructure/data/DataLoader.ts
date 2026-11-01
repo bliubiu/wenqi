@@ -137,6 +137,7 @@ async function saveToCache<T>(key: string, data: T): Promise<void> {
 export class DataLoader {
   private cache: Map<string, unknown> = new Map();
   private basePath: string;
+  private dataVersion: string | null = null;
   private static instance: DataLoader;
 
   private constructor(basePath: string = '/data/processed') {
@@ -148,14 +149,33 @@ export class DataLoader {
     return DataLoader.instance;
   }
 
-  private async loadJson<T>(filename: string): Promise<T> {
-    if (this.cache.has(filename)) {
-      return this.cache.get(filename) as T;
+  /** 数据集版本（来自 manifest.json）：用于 IndexedDB 缓存键，数据更新后旧缓存自然失效 */
+  private async ensureVersion(): Promise<string> {
+    if (this.dataVersion) return this.dataVersion;
+    try {
+      const res = await fetch(`${this.basePath}/manifest.json`);
+      if (res.ok) {
+        const manifest = await res.json();
+        this.dataVersion = String(manifest.version ?? 'unknown');
+        return this.dataVersion;
+      }
+    } catch {
+      // manifest 不可达时退化为固定键（保留现有缓存）
+    }
+    this.dataVersion = 'unknown';
+    return this.dataVersion;
+  }
+
+  async loadJson<T>(filename: string): Promise<T> {
+    const version = await this.ensureVersion();
+    const cacheKey = `${version}:${filename}`;
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey) as T;
     }
 
-    const cached = await getFromCache<T>(filename);
+    const cached = await getFromCache<T>(cacheKey);
     if (cached) {
-      this.cache.set(filename, cached);
+      this.cache.set(cacheKey, cached);
       return cached;
     }
 
@@ -165,8 +185,8 @@ export class DataLoader {
     }
 
     const data = await response.json();
-    this.cache.set(filename, data);
-    saveToCache(filename, data);
+    this.cache.set(cacheKey, data);
+    saveToCache(cacheKey, data);
     return data as T;
   }
 
