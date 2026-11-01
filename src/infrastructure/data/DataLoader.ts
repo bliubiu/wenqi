@@ -1,0 +1,229 @@
+import type { WorkShardData } from './shard';
+import { workShardRelPath } from './shard';
+
+export interface BirthDeathInfo {
+  startYear: number | null;
+  endYear: number | null;
+}
+
+export interface Poet {
+  id: string;
+  name: string;
+  dynasty: string;
+  biography: string;
+  workCount: number;
+  courtesyName: string | null;
+  pseudonym: string | null;
+  birthDeath: BirthDeathInfo | null;
+  school: string | null;
+}
+
+export interface Work {
+  id: string;
+  title: string;
+  poetId: string;
+  poetName: string;
+  dynasty: string;
+  genre: string;
+  text: string;
+}
+
+export interface ScoreResult {
+  poetId: string;
+  poetName: string;
+  dynasty: string;
+  threeQi: {
+    talent: { value: number };
+    popularity: { value: number };
+    luck: { value: number };
+  };
+}
+
+export interface Node {
+  id: string;
+  refType: 'POET' | 'WORK';
+  refId: string;
+  position: { x: number; y: number; z: number };
+  basePosition: { x: number; y: number; z: number };
+  dynasty: string;
+  genre: string | null;
+  size: number;
+  brightness: number;
+  phase: number;
+  state: string;
+  label: string;
+}
+
+export interface Dataset {
+  poets: Poet[];
+  works: Work[];
+  scores: ScoreResult[];
+  nodes: Node[];
+}
+
+export type { WorkShardData } from './shard';
+
+export interface SpatialIndexNode {
+  id: string;
+  position: { x: number; y: number; z: number };
+}
+
+export interface SpatialIndex {
+  kdTree: unknown;
+  nodes: SpatialIndexNode[];
+}
+
+/**
+ * 序列化格式标记
+ * - JSON: 人类可读，适合调试（默认）
+ * - BINCODE: 二进制紧凑格式，适合大量数据传输
+ *
+ * 当前实现全部使用 JSON 序列化。
+ * bincode 通道仅在 WASM 高频接口中启用（searchBinary 等），
+ * IndexedDB 持久化暂继续使用 JSON + 结构化克隆。
+ */
+export type SerializationFormat = 'json' | 'bincode';
+
+const DB_NAME = 'WenQiDataCacheV1';
+const STORE_NAME = 'data_cache';
+
+let dbConnection: IDBDatabase | null = null;
+
+async function openDataCacheDB(): Promise<IDBDatabase> {
+  if (dbConnection) return dbConnection;
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(STORE_NAME);
+    };
+    request.onsuccess = () => {
+      dbConnection = request.result;
+      resolve(dbConnection);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getFromCache<T>(key: string): Promise<T | null> {
+  try {
+    const db = await openDataCacheDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.get(key);
+      request.onsuccess = () => resolve(request.result ?? null);
+      request.onerror = () => reject(request.error);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function saveToCache<T>(key: string, data: T): Promise<void> {
+  try {
+    const db = await openDataCacheDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.put(data, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // 缓存写入失败不阻塞主流程
+  }
+}
+
+export class DataLoader {
+  private cache: Map<string, unknown> = new Map();
+  private basePath: string;
+  private static instance: DataLoader;
+
+  private constructor(basePath: string = '/data/processed') {
+    this.basePath = basePath;
+  }  static getInstance(basePath?: string): DataLoader {
+    if (!DataLoader.instance) {
+      DataLoader.instance = new DataLoader(basePath);
+    }
+    return DataLoader.instance;
+  }
+
+  private async loadJson<T>(filename: string): Promise<T> {
+    if (this.cache.has(filename)) {
+      return this.cache.get(filename) as T;
+    }
+
+    const cached = await getFromCache<T>(filename);
+    if (cached) {
+      this.cache.set(filename, cached);
+      return cached;
+    }
+
+    const response = await fetch(`${this.basePath}/${filename}`);
+    if (!response.ok) {
+      throw new Error(`加载 ${filename} 失败: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    this.cache.set(filename, data);
+    saveToCache(filename, data);
+    return data as T;
+  }
+
+  async loadPoets(): Promise<Poet[]> {
+    return this.loadJson<Poet[]>('poets.json');
+  }
+
+  async loadWorks(): Promise<Work[]> {
+    return this.loadJson<Work[]>('works.json');
+  }
+
+  /** 按诗人加载作品分片（由 SQLite 底座按诗人导出，路径可由 poetId 推导） */
+  async loadWorkShard(poetId: string): Promise<WorkShardData> {
+    return this.loadJson<WorkShardData>(workShardRelPath(poetId));
+  }
+
+  async loadScores(): Promise<ScoreResult[]> {
+    return this.loadJson<ScoreResult[]>('scores.json');
+  }
+
+  async loadNodes(): Promise<Node[]> {
+    return this.loadJson<Node[]>('nodes.json');
+  }
+
+  async loadSpatialIndex(): Promise<SpatialIndex> {
+    return this.loadJson<SpatialIndex>('spatial-index.json');
+  }
+
+  async loadDataset(): Promise<Dataset> {
+    const [poets, works, scores, nodes] = await Promise.all([
+      this.loadPoets(),
+      this.loadWorks(),
+      this.loadScores(),
+      this.loadNodes(),
+    ]);
+    return { poets, works, scores, nodes };
+  }
+
+  clearCache(): void {
+    this.cache.clear();
+  }
+
+  static async clearPersistentCache(): Promise<void> {
+    try {
+      const db = await openDataCacheDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch {
+      // 忽略
+    }
+  }
+
+  getCacheSize(): number {
+    return this.cache.size;
+  }
+}

@@ -35,21 +35,11 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
 
   const nodeMap = useRef<Map<string, (typeof nodes)[number]>>(new Map());
-  const workMap = useRef<Map<string, { title: string; text: string; poetId: string; poetName: string; dynasty: string }>>(new Map());
 
   useEffect(() => {
     nodeMap.current.clear();
     nodes.forEach((node) => nodeMap.current.set(node.refId, node));
   }, [nodes]);
-
-  useEffect(() => {
-    DataLoader.getInstance().loadWorks().then((allWorks: any[]) => {
-      workMap.current.clear();
-      for (const w of allWorks) {
-        workMap.current.set(w.id, { title: w.title, text: w.text || '', poetId: w.poetId, poetName: w.poetName, dynasty: w.dynasty });
-      }
-    }).catch(() => {});
-  }, []);
 
   const performSearch = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) {
@@ -73,11 +63,6 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
     try {
       const result = await rootRef.current.searchUseCase.execute(searchQuery);
       for (const node of result) {
-        let snippet: string | undefined;
-        if (node.refType === 'WORK') {
-          const w = workMap.current.get(node.refId);
-          if (w?.text) snippet = w.text.substring(0, 80);
-        }
         addResult({
           id: node.id,
           refType: node.refType,
@@ -85,7 +70,6 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
           title: node.label,
           subtitle: `${getDynastyName(node.dynasty)} · ${node.refType === 'POET' ? '诗人' : '作品'}`,
           dynasty: node.dynasty,
-          snippet,
         });
       }
     } catch {
@@ -103,25 +87,31 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
       }
     }
 
-    for (const [, work] of workMap.current) {
-      if (matchedNodes.length >= 20) break;
-      const matchTitle = work.title.toLowerCase().includes(queryLower);
-      const matchText = work.text.substring(0, 60).toLowerCase().includes(queryLower);
-      if (!matchTitle && !matchText) continue;
+    // 对命中诗人按需加载作品分片，匹配作品标题与文本（分片经 DataLoader 缓存，重复搜索零开销）
+    const matchedPoets = [...new Set(matchedNodes.filter((n) => n.refType === 'POET').map((n) => n.refId))].slice(0, 5);
+    await Promise.all(matchedPoets.map(async (poetId) => {
+      try {
+        const shard = await DataLoader.getInstance().loadWorkShard(poetId);
+        for (const w of shard.works) {
+          if (matchedNodes.length >= 20) break;
+          const matchTitle = w.title.toLowerCase().includes(queryLower);
+          const matchText = (w.text || '').substring(0, 60).toLowerCase().includes(queryLower);
+          if (!matchTitle && !matchText) continue;
 
-      const poetNode = nodeMap.current.get(work.poetId);
-      if (poetNode) {
-        addResult({
-          id: `work_${work.poetId}_${work.title.slice(0, 20)}`,
-          refType: 'POET',
-          refId: poetNode.refId,
-          title: work.title,
-          subtitle: `${work.poetName} · 作品`,
-          dynasty: poetNode.dynasty,
-          snippet: work.text.substring(0, 80),
-        });
+          addResult({
+            id: `work_${w.poetId}_${w.title.slice(0, 20)}`,
+            refType: 'POET',
+            refId: w.poetId,
+            title: w.title,
+            subtitle: `${w.poetName} · 作品`,
+            dynasty: w.dynasty,
+            snippet: (w.text || '').substring(0, 80),
+          });
+        }
+      } catch {
+        // 分片加载失败时跳过该诗人的作品匹配
       }
-    }
+    }));
 
     setResults(matchedNodes);
     setSearchOpen(matchedNodes.length > 0);

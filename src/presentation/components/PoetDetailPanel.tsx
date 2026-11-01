@@ -50,10 +50,9 @@ export function PoetDetailPanel({ poet, onClose }: PoetDetailPanelProps) {
     setSelectedWork(null);
     if (!poet.id) return;
     setLoadingWorks(true);
-    DataLoader.getInstance().loadWorks()
-      .then((allWorks: any[]) => {
-        const poetWorks = allWorks.filter((w) => w.poetId === poet.id);
-        setWorks(poetWorks);
+    DataLoader.getInstance().loadWorkShard(poet.id)
+      .then((shard) => {
+        setWorks(shard.works);
       })
       .catch(() => {})
       .finally(() => setLoadingWorks(false));

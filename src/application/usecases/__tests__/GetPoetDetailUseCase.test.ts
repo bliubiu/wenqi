@@ -15,7 +15,6 @@ const mockPoetRepo: PoetRepository = {
 };
 
 const mockWorkRepo: WorkRepository = {
-  loadAll: async () => [],
   findByPoetId: async () => [
     new Work('w1', '静夜思', 'poet_1', '李白', 'TANG' as any, 'SHI', '床前明月光'),
   ],

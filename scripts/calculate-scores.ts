@@ -2,27 +2,25 @@
  * 文气项目三气评分计算脚本
  *
  * 功能：
- * 1. 读取处理后的诗人和作品数据
+ * 1. 从 SQLite 底座读取诗人和作品数据
  * 2. 计算每个诗人的三气评分（才气/人气/运气）
- * 3. 生成 scores.json
+ * 3. 评分结果写回数据库 scores 表（DB 为唯一真相源）
  *
  * 使用方式：
  * bun run scripts/calculate-scores.ts
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as crypto from 'crypto';
+import { openDatabase, loadPoets, loadAllWorks, insertScores, setMeta, logStage, DEFAULT_DB } from './db-core';
 
-// 数据目录
-const DATA_DIR = path.join(__dirname, '../data/processed');
+// 评分算法版本
+const SCORING_ALGORITHM_VERSION = 'v1.1';
 
 // 接口定义
 interface Poet {
   id: string;
   name: string;
   dynasty: string;
-  biography: string;
+  biography: string | null;
   workCount: number;
 }
 
@@ -30,15 +28,14 @@ interface Work {
   id: string;
   title: string;
   poetId: string;
-  poetName: string;
+  poetName: string | null;
   dynasty: string;
-  genre: string;
-  text: string;
+  genre: string | null;
+  text: string | null;
 }
 
 interface TalentScore {
   value: number;
-  algorithmVersion: string;
   factors: {
     lexicalUniqueness: number;
     imageryNovelty: number;
@@ -48,7 +45,6 @@ interface TalentScore {
 
 interface PopularityScore {
   value: number;
-  algorithmVersion: string;
   factors: {
     citationCount: number;
     textbookCount: number;
@@ -58,7 +54,6 @@ interface PopularityScore {
 
 interface LuckScore {
   value: number;
-  algorithmVersion: string;
   factors: {
     politicalEnvironment: number;
     rediscoveryEvents: number;
@@ -89,7 +84,7 @@ function calculateLexicalUniqueness(works: Work[]): number {
   const uniqueChars = new Set<string>();
 
   for (const work of works) {
-    for (const ch of work.text) {
+    for (const ch of work.text ?? '') {
       if (!/\s/.test(ch) && !/[^一-龥]/.test(ch)) {
         totalChars++;
         uniqueChars.add(ch);
@@ -113,7 +108,7 @@ function calculateImageryNovelty(works: Work[]): number {
   let totalBigrams = 0;
 
   for (const work of works) {
-    const chars = Array.from(work.text);
+    const chars = Array.from(work.text ?? '');
     for (let i = 0; i < chars.length - 1; i++) {
       if (!/\s/.test(chars[i]) && !/\s/.test(chars[i + 1])) {
         const bigram = chars[i] + chars[i + 1];
@@ -142,7 +137,7 @@ function calculateGenreInnovation(works: Work[]): number {
 
   const genres = new Set<string>();
   for (const work of works) {
-    genres.add(work.genre);
+    if (work.genre) genres.add(work.genre);
   }
 
   return Math.min(genres.size * 20, 100);
@@ -162,7 +157,6 @@ function calculateTalent(poet: Poet, works: Work[]): TalentScore {
 
   return {
     value: Math.max(0, Math.min(100, value)),
-    algorithmVersion: 'v1.1',
     factors: {
       lexicalUniqueness,
       imageryNovelty,
@@ -191,14 +185,13 @@ function calculatePopularity(poet: Poet, works: Work[]): PopularityScore {
 
   const citationCount = Math.round(workCount * multiplier);
   const textbookCount = Math.floor(workCount * 0.05);
-  const searchHeat = Math.min(poet.biography.length / 20, 100);
+  const searchHeat = Math.min((poet.biography ?? '').length / 20, 100);
 
   const raw = citationCount * 0.5 + textbookCount * 0.3 + searchHeat * 0.2;
   const value = Math.round(Math.min(raw, 100));
 
   return {
     value,
-    algorithmVersion: 'v1.1',
     factors: {
       citationCount,
       textbookCount,
@@ -255,7 +248,6 @@ function calculateLuck(poet: Poet): LuckScore {
 
   return {
     value,
-    algorithmVersion: 'v1.1',
     factors: {
       politicalEnvironment,
       rediscoveryEvents,
@@ -275,7 +267,7 @@ function calculateThreeQi(poet: Poet, works: Work[]): ThreeQi {
     talent,
     popularity,
     luck,
-    algorithmVersion: 'v1.1',
+    algorithmVersion: SCORING_ALGORITHM_VERSION,
   };
 }
 
@@ -284,15 +276,13 @@ function calculateThreeQi(poet: Poet, works: Work[]): ThreeQi {
  */
 function main() {
   console.log('=== 文气项目三气评分计算 ===\n');
+  const startedAt = Date.now();
 
-  // 读取数据
+  // 读取数据（SQLite 底座为唯一真相源）
   console.log('读取数据...');
-  const poets: Poet[] = JSON.parse(
-    fs.readFileSync(path.join(DATA_DIR, 'poets.json'), 'utf-8')
-  );
-  const works: Work[] = JSON.parse(
-    fs.readFileSync(path.join(DATA_DIR, 'works.json'), 'utf-8')
-  );
+  const db = openDatabase(DEFAULT_DB);
+  const poets: Poet[] = loadPoets(db);
+  const works: Work[] = loadAllWorks(db);
 
   console.log(`  诗人数量: ${poets.length}`);
   console.log(`  作品数量: ${works.length}`);
@@ -377,33 +367,23 @@ function main() {
     console.log(`${i + 1}. ${r.poetName} (${r.dynasty}): ${r.threeQi.popularity.value}`);
   });
 
-  // 保存评分结果
+  // 保存评分结果（写回数据库，幂等覆盖）
   console.log('\n保存评分结果...');
-  fs.writeFileSync(
-    path.join(DATA_DIR, 'scores.json'),
-    JSON.stringify(results, null, 2),
-    'utf-8'
-  );
-  console.log('  已保存 scores.json');
-
-  // 更新 manifest（upsert 避免重复条目）
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(DATA_DIR, 'manifest.json'), 'utf-8')
-  );
-  const existing = new Map(manifest.files.map((f: any) => [f.path, f]));
-  existing.set('scores.json', {
-    path: 'scores.json',
-    type: 'scores',
-    size: fs.statSync(path.join(DATA_DIR, 'scores.json')).size,
-    hash: crypto.createHash('sha256').update(fs.readFileSync(path.join(DATA_DIR, 'scores.json'))).digest('hex'),
+  db.exec('DELETE FROM scores');
+  const { inserted } = insertScores(db, results as any);
+  setMeta(db, 'algorithm_version', SCORING_ALGORITHM_VERSION);
+  setMeta(db, 'scores_updated_at', new Date().toISOString());
+  setMeta(db, 'scores_count', inserted);
+  logStage(db, {
+    stage: 'scores',
+    datasetVersion: null,
+    source: null,
+    scoresCount: inserted,
+    durationMs: Date.now() - startedAt,
   });
-  manifest.files = Array.from(existing.values());
-  fs.writeFileSync(
-    path.join(DATA_DIR, 'manifest.json'),
-    JSON.stringify(manifest, null, 2),
-    'utf-8'
-  );
-  console.log('  已更新 manifest.json');
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+  db.close();
+  console.log(`  已写入数据库 scores 表: ${inserted} 条`);
 
   console.log('\n=== 计算完成 ===');
 }

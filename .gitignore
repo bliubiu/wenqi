@@ -50,7 +50,7 @@ coverage/
 tsconfig.tsbuildinfo
 next-env.d.ts
 
-# 大型数据文件（原始数据集，可从源仓库获取）
-data/
+# 大型数据文件（原始数据集，可从源仓库获取；仅忽略根目录 data/，避免误伤 src/infrastructure/data/）
+/data/
 public/data/
 public/wasm/

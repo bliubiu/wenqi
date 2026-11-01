@@ -21,7 +21,6 @@ export interface PoetRepository {
 }
 
 export interface WorkRepository {
-  loadAll(): Promise<Work[]>;
   findByPoetId(poetId: string): Promise<Work[]>;
 }
 

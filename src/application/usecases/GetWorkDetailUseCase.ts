@@ -3,6 +3,8 @@ import { type WorkDetailDTO, type PoetDTO, type WorkDTO } from '../dto/GalaxyDTO
 
 export interface GetWorkDetailRequest {
   workId: string;
+  /** 作品所属诗人 ID（分片加载按诗人组织，必填） */
+  poetId: string;
 }
 
 export interface GetWorkDetailResponse {
@@ -19,8 +21,8 @@ export class GetWorkDetailUseCase {
   ) {}
 
   async execute(request: GetWorkDetailRequest): Promise<GetWorkDetailResponse> {
-    const works = await this.workRepo.loadAll();
-    const work = works.find(w => w.id === request.workId);
+    const poetWorks = await this.workRepo.findByPoetId(request.poetId);
+    const work = poetWorks.find(w => w.id === request.workId);
     if (!work) {
       throw new Error(`未找到指定作品: ${request.workId}`);
     }
@@ -30,7 +32,16 @@ export class GetWorkDetailUseCase {
       throw new Error(`未找到作品所属诗人: ${work.poetId}`);
     }
 
-    const poetWorks = works.filter(w => w.poetId === work.poetId && w.id !== work.id);
+    const relatedWorks = poetWorks
+      .filter(w => w.id !== work.id)
+      .map(w => ({
+        id: w.id,
+        title: w.title,
+        genre: w.genre,
+        poetId: w.poetId,
+        poetName: w.poetName,
+        threeQi: null,
+      }));
 
     const workDetail: WorkDetailDTO = {
       id: work.id,
@@ -54,15 +65,6 @@ export class GetWorkDetailUseCase {
       pseudonym: poet.pseudonym,
       school: poet.school,
     };
-
-    const relatedWorks: WorkDTO[] = poetWorks.map(w => ({
-      id: w.id,
-      title: w.title,
-      genre: w.genre,
-      poetId: w.poetId,
-      poetName: w.poetName,
-      threeQi: null,
-    }));
 
     return {
       work: workDetail,

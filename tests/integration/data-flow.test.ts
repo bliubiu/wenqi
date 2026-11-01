@@ -34,6 +34,10 @@ const { mockPoets, mockScores, mockNodes, mockWorks, createMockLoader, mockLoade
       loadScores: () => Promise.resolve(mockScores),
       loadNodes: () => Promise.resolve(mockNodes),
       loadWorks: () => Promise.resolve(mockWorks),
+      loadWorkShard: (poetId: string) => {
+        const works = mockWorks.filter((w) => w.poetId === poetId);
+        return Promise.resolve({ poetId, dynasty: 'TANG', count: works.length, works });
+      },
       loadSpatialIndex: () => Promise.resolve(undefined),
       clearCache: () => {},
       getCacheSize: () => 0,
@@ -89,12 +93,12 @@ describe('数据流集成测试', () => {
     expect(nodes[0].state).toBe('IDLE');
   });
 
-  it('JsonWorkRepository 应加载并转换作品', async () => {
+  it('JsonWorkRepository 应按诗人分片加载并转换作品', async () => {
     const { JsonWorkRepository } = await import('@/infrastructure/data/WorkRepository');
     const repo = new JsonWorkRepository();
-    const works = await repo.loadAll();
+    const works = await repo.findByPoetId('poet_1');
 
-    expect(works).toHaveLength(2);
+    expect(works).toHaveLength(1);
     expect(works[0].title).toBe('静夜思');
     expect(works[0].poetId).toBe('poet_1');
   });

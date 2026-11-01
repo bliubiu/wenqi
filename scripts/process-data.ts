@@ -4,7 +4,7 @@
  * 功能：
  * 1. 读取 chinese-poetry 原始数据
  * 2. 清洗、去重、标准化
- * 3. 生成 poets.json 和 works.json
+ * 3. 直写 SQLite 底座（poets 表 + works 朝代分表，DB 为唯一真相源）
  *
  * 使用方式：
  * bun run scripts/process-data.ts
@@ -13,6 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { rebuildDatabase, insertPoets, insertWorks, setMeta, logStage, DEFAULT_DB, type PoetRow, type WorkRow } from './db-core';
 
 // 朝代枚举
 enum DynastyCode {
@@ -137,11 +138,15 @@ function deterministicId(prefix: string, content: string): string {
  */
 function deduplicateWorks(works: WorkRaw[]): WorkRaw[] {
   const seen = new Map<string, WorkRaw>();
+  const seenIds = new Set<string>();
   for (const w of works) {
+    // ID 级去重：同一作品 ID 只保留首条（跨诗集重复收录）
+    if (seenIds.has(w.id)) continue;
     const contentKey = (w.paragraphs || []).join('').slice(0, 100);
     const key = crypto.createHash('sha256').update(`${w.title}|${w.author}|${contentKey}`).digest('hex');
     if (!seen.has(key)) {
       seen.set(key, w);
+      seenIds.add(w.id);
     }
   }
   return Array.from(seen.values());
@@ -1162,54 +1167,64 @@ function main() {
     console.log(`  ${dynasty}: ${count} 人`);
   }
 
-  // 保存数据
-  console.log('\n保存数据...');
+  // 直写 SQLite 底座（DB 为唯一真相源）
+  console.log('\n写入 SQLite 底座...');
+  const startedAt = Date.now();
+  const db = rebuildDatabase(DEFAULT_DB);
 
-  fs.writeFileSync(
-    path.join(OUTPUT_DIR, 'poets.json'),
-    JSON.stringify(poetsProcessed, null, 2),
-    'utf-8'
-  );
-  console.log('  已保存 poets.json');
+  const poetRows: PoetRow[] = poetsProcessed.map((p) => ({
+    id: p.id,
+    name: p.name,
+    dynasty: p.dynasty,
+    biography: p.biography,
+    workCount: p.workCount,
+    courtesyName: p.courtesyName,
+    pseudonym: p.pseudonym,
+    birthDeath: p.birthDeath,
+    school: p.school,
+  }));
+  const poetsResult = insertPoets(db, poetRows);
+  console.log(`  poets 表: ${poetsResult.inserted} 位${poetsResult.skipped > 0 ? `（跳过重复 ID ${poetsResult.skipped} 条）` : ''}`);
 
-  fs.writeFileSync(
-    path.join(OUTPUT_DIR, 'works.json'),
-    JSON.stringify(worksProcessed, null, 2),
-    'utf-8'
-  );
-  console.log('  已保存 works.json');
+  const workRows: WorkRow[] = worksProcessed.map((w) => ({
+    id: w.id,
+    title: w.title,
+    poetId: w.poetId,
+    poetName: w.poetName,
+    dynasty: w.dynasty,
+    genre: w.genre,
+    text: w.text,
+  }));
+  const poetDynasty = new Map(poetRows.map((p) => [p.id, p.dynasty]));
+  const worksByTable = insertWorks(db, workRows, poetDynasty);
+  const workTotal = Object.values(worksByTable).reduce((a, b) => a + b, 0);
+  for (const [table, count] of Object.entries(worksByTable)) {
+    console.log(`  分表 ${table}: ${count} 首`);
+  }
+  console.log(`  works 分表合计: ${workTotal} 首`);
 
-  // 生成 manifest
-  const poetsPath = path.join(OUTPUT_DIR, 'poets.json');
-  const worksPath = path.join(OUTPUT_DIR, 'works.json');
-  const manifest = {
-    version: '2026.06.24',
-    algorithmVersion: 'v1.0',
-    generatedAt: new Date().toISOString(),
-    stats: {
-      poetCount: poetsProcessed.length,
-      workCount: worksProcessed.length,
-      relationCount: 0,
-    },
-    files: [
-      { path: 'poets.json', type: 'poets', size: fs.statSync(poetsPath).size, hash: computeHash(poetsPath) },
-      { path: 'works.json', type: 'works', size: fs.statSync(worksPath).size, hash: computeHash(worksPath) },
-    ],
-  };
+  const datasetVersion = '2026.06.24';
+  setMeta(db, 'schema_version', '1');
+  setMeta(db, 'dataset_version', datasetVersion);
+  setMeta(db, 'algorithm_version', 'v1.0');
+  setMeta(db, 'generated_at', new Date().toISOString());
+  setMeta(db, 'poets_count', poetsResult.inserted);
+  setMeta(db, 'works_count', workTotal);
+  setMeta(db, 'relation_count', 0);
+  logStage(db, {
+    stage: 'process',
+    datasetVersion,
+    source: 'data/raw/chinese-poetry',
+    poetsCount: poetsResult.inserted,
+    worksCount: workTotal,
+    durationMs: Date.now() - startedAt,
+  });
 
-  fs.writeFileSync(
-    path.join(OUTPUT_DIR, 'manifest.json'),
-    JSON.stringify(manifest, null, 2),
-    'utf-8'
-  );
-  console.log('  已保存 manifest.json');
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+  db.close();
+  console.log(`  数据库写入完成，耗时 ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
 
   console.log('\n=== 处理完成 ===');
-}
-
-function computeHash(filePath: string): string {
-  const content = fs.readFileSync(filePath);
-  return crypto.createHash('sha256').update(content).digest('hex');
 }
 
 // 运行主函数

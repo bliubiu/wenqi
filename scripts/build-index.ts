@@ -2,33 +2,17 @@
  * 文气项目空间索引构建脚本
  *
  * 功能：
- * 1. 读取评分数据
+ * 1. 从 SQLite 底座读取评分数据
  * 2. 构建 KD-Tree 空间索引
- * 3. 生成 nodes.json 和 spatial-index.json
+ * 3. 节点与空间索引写回数据库（nodes / spatial_index 表），前端 JSON 由 db:export 导出
  *
  * 使用方式：
  * bun run scripts/build-index.ts
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as crypto from 'crypto';
-
-// 数据目录
-const DATA_DIR = path.join(__dirname, '../data/processed');
+import { openDatabase, loadScores, insertNodes, setMeta, logStage, DEFAULT_DB, type ScoreRow } from './db-core';
 
 // 接口定义
-interface ScoreResult {
-  poetId: string;
-  poetName: string;
-  dynasty: string;
-  threeQi: {
-    talent: { value: number };
-    popularity: { value: number };
-    luck: { value: number };
-  };
-}
-
 interface NodePosition {
   x: number; // 运气轴
   y: number; // 才气轴
@@ -138,21 +122,21 @@ function generatePhase(): number {
  */
 function main() {
   console.log('=== 文气项目空间索引构建 ===\n');
+  const startedAt = Date.now();
 
-  // 读取评分数据
+  // 读取评分数据（SQLite 底座为唯一真相源）
   console.log('读取评分数据...');
-  const scores: ScoreResult[] = JSON.parse(
-    fs.readFileSync(path.join(DATA_DIR, 'scores.json'), 'utf-8')
-  );
+  const db = openDatabase(DEFAULT_DB);
+  const scores = loadScores(db);
   console.log(`  诗人数量: ${scores.length}`);
 
   // 构建节点
   console.log('\n构建节点数据...');
   const nodes: Node[] = scores.map((score) => {
     const position: NodePosition = {
-      x: score.threeQi.luck.value,        // 运气轴
-      y: score.threeQi.talent.value,      // 才气轴
-      z: score.threeQi.popularity.value,  // 人气轴
+      x: score.threeQi.luck.value ?? 0,        // 运气轴
+      y: score.threeQi.talent.value ?? 0,      // 才气轴
+      z: score.threeQi.popularity.value ?? 0,  // 人气轴
     };
 
     return {
@@ -161,13 +145,13 @@ function main() {
       refId: score.poetId,
       position,
       basePosition: { ...position },
-      dynasty: score.dynasty,
+      dynasty: score.dynasty ?? '',
       genre: null,
-      size: calculateSize(score.threeQi.popularity.value),
-      brightness: calculateBrightness(score.threeQi.talent.value),
+      size: calculateSize(score.threeQi.popularity.value ?? 0),
+      brightness: calculateBrightness(score.threeQi.talent.value ?? 0),
       phase: generatePhase(),
       state: 'IDLE',
-      label: score.poetName,
+      label: score.poetName ?? '',
     };
   });
 
@@ -214,40 +198,21 @@ function main() {
     },
   };
 
-  // 保存节点数据
+  // 保存节点与空间索引（写回数据库，幂等覆盖）
   console.log('\n保存数据...');
-  fs.writeFileSync(
-    path.join(DATA_DIR, 'nodes.json'),
-    JSON.stringify(nodes, null, 2),
-    'utf-8'
-  );
-  console.log('  已保存 nodes.json');
-
-  // 保存空间索引
-  fs.writeFileSync(
-    path.join(DATA_DIR, 'spatial-index.json'),
-    JSON.stringify(indexData, null, 2),
-    'utf-8'
-  );
-  console.log('  已保存 spatial-index.json');
-
-  // 更新 manifest（upsert 避免重复条目）
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(DATA_DIR, 'manifest.json'), 'utf-8')
-  );
-  const existing = new Map(manifest.files.map((f: any) => [f.path, f] as const));
-  const newEntries = [
-    { path: 'nodes.json', type: 'nodes', size: fs.statSync(path.join(DATA_DIR, 'nodes.json')).size, hash: crypto.createHash('sha256').update(fs.readFileSync(path.join(DATA_DIR, 'nodes.json'))).digest('hex') },
-    { path: 'spatial-index.json', type: 'index', size: fs.statSync(path.join(DATA_DIR, 'spatial-index.json')).size, hash: crypto.createHash('sha256').update(fs.readFileSync(path.join(DATA_DIR, 'spatial-index.json'))).digest('hex') },
-  ];
-  for (const entry of newEntries) existing.set(entry.path, entry);
-  manifest.files = Array.from(existing.values());
-  fs.writeFileSync(
-    path.join(DATA_DIR, 'manifest.json'),
-    JSON.stringify(manifest, null, 2),
-    'utf-8'
-  );
-  console.log('  已更新 manifest.json');
+  db.exec('DELETE FROM nodes');
+  const { inserted } = insertNodes(db, nodes as any);
+  db.exec('DELETE FROM spatial_index');
+  db.query('INSERT INTO spatial_index (id, data) VALUES (1, ?)').run(JSON.stringify(indexData));
+  setMeta(db, 'nodes_updated_at', new Date().toISOString());
+  setMeta(db, 'nodes_count', inserted);
+  logStage(db, {
+    stage: 'index',
+    nodesCount: inserted,
+    durationMs: Date.now() - startedAt,
+  });
+  console.log(`  已写入数据库 nodes 表: ${inserted} 个节点`);
+  console.log(`  已写入数据库 spatial_index 表`);
 
   // 测试查询
   console.log('\n=== 测试查询 ===');
@@ -288,6 +253,9 @@ function main() {
   for (const [dynasty, count] of dynastyCounts) {
     console.log(`  ${dynasty}: ${count} 个节点`);
   }
+
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+  db.close();
 
   console.log('\n=== 构建完成 ===');
 }

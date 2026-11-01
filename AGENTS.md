@@ -41,7 +41,7 @@
 - 4层**DDD 架构（领域驱动设计）**和**TDD（测试驱动开发）**设计思想
 
 - Rust (WASM)
-- bun 1.3.14 + TypeScript 6.0 + Tailwind CSS + Next.js 16.2.9 + React 19.2 + Three.js 
+- bun  + TypeScript 7.0 + Tailwind CSS + Next.js 16.2.9 + React 19.2 + Three.js 
 
 - 中文字体内嵌（SIL 协议，无版权风险）：Noto Sans SC + 系统默认字体（保底策略）
 
@@ -53,9 +53,13 @@
 
 #### 1. [chinese-poetry](https://github.com/chinese-poetry/chinese-poetry) 数据集
 
-已下载本地目录： `D:\19-Training\learngo\name\repos\chinese-poetry-master`
+已下载本地目录： `data\raw\chinese-poetry`
 
 
+
+#### 2. 将诗词物料入库
+
+使用sqlite(wal模式) 【可选postgresql】存储诗词，默认存储到`项目根目录\data`目录，提供import命令CLI工具写入数据库表存储。DB作为项目运行时唯一真相源。
 
 
 
@@ -65,7 +69,7 @@
 支持多日志级别（DEBUG、INFO、ERROR），并提供文件输出和日志轮转功能。
 
 - 日志级别：支持 DEBUG、INFO、ERROR 三个级别，可通过配置文件指定日志级别，默认 INFO 级别
-- 日志格式：`[YYYY-MM-DD HH:MM:SS.SSS] [级别] [线程ID|进程ID] [模块:行号] - 日志内容`
+- 日志格式：`[YYYY-MM-DD HH:MM:SS.SSS] [级别] [线程ID 或 进程ID] [模块:行号] - 日志内容`
 - 日志输出：支持文件输出和终端输出，文件输出路径默认 `logs/`，日志文件按日期轮转（每日一个文件），保留 32 天日志，自动清理过期日志
 - 日志内容：统一使用中文，清晰记录操作行为、执行结果、错误信息，便于问题排查和审计
 - 日志内容不能记录敏感信息，必须严格遵循脱敏策略，禁止记录：密码、完整身份证号、手机号
@@ -80,6 +84,51 @@
 - 项目文档统一存储 `docs/` 目录，按顺序标号命名中文文档
 - 注释、日志内容统一使用中文
 - 统一错误处理，所有错误信息都必须使用中文，禁止打印明文密码等敏感信息
+- git@github.com:bliubiu/wenqi.git 
+
+
+
+#### CHANGELOG 规范
+
+> 版本号类型说明：**CalVer（日历版本）**/**SemVer（语义化版本）**
+>
+> - CalVer 版本号格式：YY.MM.DD.MICRO
+> - SemVer 格式：`主版本号Major.次版本号Minor.补丁号Patch[-可选标签 alpha|beta|rc]`
+
+- 使用CalVer（日历版本）版本号
+- **统一版本规范格式**：`YYYY.MM.DD.MICRO`（年.月.日.迭代号）
+- 项目根目建立 CHANGELOG.md 文档
+- 根据迭代内容，严格按照 SemVer/CalVer 规则确定新版本号
+- 在稳定分支打 Tag，Tag 名称与版本号一致
+- Tag 仅允许正式发布时创建，禁止随意打测试 Tag
+
+
+
+##### 格式模板
+
+```
+## [2026.08.17.0] - 0.1.0
+### ⚠️ Breaking Changes  破坏性变更
+- 【用户模块】废弃旧版登录接口 /api/v1/login，请迁移至 /api/v2/login
+
+### ✨ New Features 新增功能
+- 【权限模块】新增角色批量授权功能 #123
+
+### 🐛 Bug Fixes  问题修复
+- 【订单模块】修复极端场景下订单状态同步异常问题 #121
+
+### 📈 Improvements 性能/体验优化
+- 【接口服务】优化列表查询性能，响应速度提升40%
+
+### 📚 Docs 文档更新
+- 更新权限模块使用文档与接口说明
+
+### 🔧 Dependencies 依赖更新
+- 
+
+### 🗑 Deprecated 废弃功能
+- 
+```
 
 
 

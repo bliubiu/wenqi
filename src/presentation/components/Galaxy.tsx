@@ -23,7 +23,6 @@ import { useAccessibility } from '@/presentation/hooks/useAccessibility';
 import { useGalaxyStore } from '@/presentation/store/galaxyStore';
 import { useUIStore } from '@/presentation/store/uiStore';
 import { getDynastyName } from '@/domain/value-objects/DynastyCode';
-import { DataLoader } from '@/infrastructure/data/DataLoader';
 
 interface RawNode {
   id: string;
@@ -47,7 +46,6 @@ export function Galaxy() {
   const textRef = useRef<TextFallbackEngine | null>(null);
   const rawNodesRef = useRef<RawNode[]>([]);
   const galaxyDataRef = useRef<{ poetMap: Map<string, PoetDTO>; scoreMap: Map<string, ScoreDTO> } | null>(null);
-  const workRefMapRef = useRef<Map<string, string>>(new Map());
 
   const { preferences } = useAccessibility();
 
@@ -105,14 +103,6 @@ export function Galaxy() {
         rawNodesRef.current = rawNodes;
         galaxyDataRef.current = { poetMap: galaxyData.poetMap, scoreMap: galaxyData.scoreMap };
 
-        DataLoader.getInstance().loadWorks().then((allWorks: any[]) => {
-          const map = new Map<string, string>();
-          for (const w of allWorks) {
-            map.set(w.id, w.poetId);
-          }
-          workRefMapRef.current = map;
-        }).catch(() => {});
-
         useGalaxyStore.getState().setNodes(
           rawNodes.map((n) => ({
             id: n.id,
@@ -149,10 +139,7 @@ export function Galaxy() {
             const current = galaxyDataRef.current;
             if (!current) return;
 
-            let poetId = rawNode.refId;
-            if (rawNode.refType === 'WORK') {
-              poetId = workRefMapRef.current.get(rawNode.refId) || poetId;
-            }
+            const poetId = rawNode.refId;
 
             const poetDTO = current.poetMap.get(poetId);
             if (poetDTO) {

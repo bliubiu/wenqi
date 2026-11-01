@@ -14,11 +14,13 @@
     "data:process": "bun run scripts/process-data.ts",
     "data:score": "bun run scripts/calculate-scores.ts",
     "data:index": "bun run scripts/build-index.ts",
-    "data:search": "bun run scripts/build-search-index.ts",
-    "data:all": "bun run scripts/process-data.ts && bun run scripts/calculate-scores.ts && bun run scripts/build-index.ts && bun run scripts/build-search-index.ts && bun run data:sync",
-    "data:sync": "bun -e \"const fs=require('fs');const p=require('path');const s=p.join('data','processed');const d=p.join('public','data','processed');if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});const exclude=new Set(['search-index.json']);for(const f of fs.readdirSync(s)){if(f.endsWith('.json')&&!exclude.has(f)){fs.copyFileSync(p.join(s,f),p.join(d,f));console.log('已同步: '+f);}}\"",
+    "data:all": "bun run scripts/process-data.ts && bun run scripts/calculate-scores.ts && bun run scripts/build-index.ts && bun run db:export",
+    "db:import": "bun run scripts/db.ts import",
+    "db:export": "bun run scripts/db.ts export",
+    "db:dump": "bun run scripts/db.ts dump",
+    "db:stats": "bun run scripts/db.ts stats",
     "build:wasm": "cd crates/wenqi-core && wasm-pack build --target web --out-dir ../../public/wasm",
-    "postbuild": "bun run data:sync"
+    "postbuild": "bun run db:export"
   },
   "dependencies": {
     "next": "^16.2.9",
@@ -31,6 +33,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/bun": "^1.4.4",
     "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
