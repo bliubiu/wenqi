@@ -11,7 +11,7 @@ export interface UnfocusResponse {
 export class UnfocusUseCase {
   constructor(private galaxy: Galaxy) {}
 
-  execute(request?: UnfocusRequest): UnfocusResponse {
+  execute(_request?: UnfocusRequest): UnfocusResponse {
     const focusedId = this.galaxy.getFocusedNodeId();
     if (!focusedId) return { restoredNodeIds: [] };
 

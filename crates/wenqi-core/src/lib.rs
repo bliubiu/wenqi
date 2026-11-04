@@ -6,6 +6,7 @@ pub mod index;
 pub mod search;
 pub mod clustering;
 pub mod codec;
+pub mod philology;
 
 // 当 panic 时输出错误信息到控制台
 pub fn set_panic_hook() {

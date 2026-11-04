@@ -26,6 +26,9 @@ export class TextFallbackEngine {
   private container: HTMLElement;
   private nodes: Node[] = [];
   private selectedNode: Node | null = null;
+  /** 时间区间可见范围，null 表示全量 */
+  private visibleYearFrom = -99999;
+  private visibleYearTo = 99999;
 
   // 回调
   private onNodeSelect: ((node: Node | null) => void) | null = null;
@@ -48,6 +51,20 @@ export class TextFallbackEngine {
   async loadNodes(nodes: Node[]): Promise<void> {
     this.nodes = nodes;
     this.render();
+  }
+
+  /** 设置时间区间可见范围；null 表示全量（文字模式按 CPU 过滤列表） */
+  setVisibleRange(from: number | null, to: number | null): void {
+    this.visibleYearFrom = from ?? -99999;
+    this.visibleYearTo = to ?? 99999;
+    this.render();
+  }
+
+  private visibleNodes(): Node[] {
+    return this.nodes.filter((node) => {
+      const year = node.birthYear ?? 0;
+      return year >= this.visibleYearFrom && year <= this.visibleYearTo;
+    });
   }
 
   /**
@@ -84,7 +101,7 @@ export class TextFallbackEngine {
     leftPanel.appendChild(title);
 
     const info = document.createElement('p');
-    info.textContent = `共 ${this.nodes.length} 位诗人`;
+    info.textContent = `共 ${this.visibleNodes().length} 位诗人`;
     info.style.cssText = 'color: rgba(255, 255, 255, 0.6); margin-bottom: 20px;';
     leftPanel.appendChild(info);
 
@@ -162,7 +179,7 @@ export class TextFallbackEngine {
   private groupByDynasty(): Map<string, Node[]> {
     const groups = new Map<string, Node[]>();
 
-    for (const node of this.nodes) {
+    for (const node of this.visibleNodes()) {
       if (!groups.has(node.dynasty)) {
         groups.set(node.dynasty, []);
       }

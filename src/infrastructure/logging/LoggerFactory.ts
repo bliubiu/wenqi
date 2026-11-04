@@ -62,7 +62,7 @@ export class LoggerFactory {
 
     if (config.fileOutput) {
       fileLogger = this.getFileLogger(config.level, config.retentionDays);
-      fileLogger.init().then(ok => {
+      fileLogger.init().then(() => {
         if (fileLogger?.isReady) {
           consoleLogger.info('文件日志器初始化完成');
         }

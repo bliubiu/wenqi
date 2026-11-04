@@ -28,6 +28,9 @@ export class Canvas2DEngine {
   private ctx: CanvasRenderingContext2D;
   private nodes: Node[] = [];
   private animationId: number | null = null;
+  /** 时间区间可见范围，null 表示全量 */
+  private visibleYearFrom = -99999;
+  private visibleYearTo = 99999;
 
   // 视图状态
   private offsetX = 0;
@@ -115,6 +118,7 @@ export class Canvas2DEngine {
 
       // 检查是否点击了节点
       for (const node of this.nodes) {
+        if (!this.isYearVisible(node)) continue;
         const x = node.position.x * this.scale + this.offsetX;
         const y = node.position.y * this.scale + this.offsetY;
         const radius = node.size * 2;
@@ -156,6 +160,17 @@ export class Canvas2DEngine {
    */
   async loadNodes(nodes: Node[]): Promise<void> {
     this.nodes = nodes;
+  }
+
+  /** 设置时间区间可见范围；null 表示全量（降级路径按 CPU 过滤绘制与拾取） */
+  setVisibleRange(from: number | null, to: number | null): void {
+    this.visibleYearFrom = from ?? -99999;
+    this.visibleYearTo = to ?? 99999;
+  }
+
+  private isYearVisible(node: Node): boolean {
+    const year = node.birthYear ?? 0;
+    return year >= this.visibleYearFrom && year <= this.visibleYearTo;
   }
 
   /**
@@ -241,6 +256,7 @@ export class Canvas2DEngine {
     const { ctx, nodes, offsetX, offsetY, scale } = this;
 
     for (const node of nodes) {
+      if (!this.isYearVisible(node)) continue;
       const x = node.position.x * scale + offsetX;
       const y = node.position.y * scale + offsetY;
       const radius = node.size * 2;

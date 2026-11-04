@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CompositionRoot } from '@/di/composition-root';
+import { SearchWorkerClient } from '@/infrastructure/search/SearchWorkerClient';
 import { getDynastyName } from '@/domain/value-objects/DynastyCode';
-import { useGalaxyStore } from '@/presentation/store/galaxyStore';
 import { useUIStore } from '@/presentation/store/uiStore';
 
 interface SearchResultItem {
@@ -14,21 +14,28 @@ interface SearchResultItem {
   subtitle: string;
   dynasty: string;
   snippet?: string;
+  /** 意境（语义）通道命中的标签 */
+  labels?: string[];
 }
 
 interface SearchProps {
   nodes: Array<{ id: string; label: string; dynasty: string; refId: string; refType: string }>;
   onNodeSelect: (node: { id: string; refId: string }) => void;
+  /** 分享链接携带的初始搜索词 */
+  initialQuery?: string | null;
+  /** 搜索词变化回调（用于分享链接携带当前搜索态） */
+  onQueryChange?: (query: string) => void;
 }
 
-export function Search({ nodes, onNodeSelect }: SearchProps) {
-  const [query, setQuery] = useState('');
+export function Search({ nodes, onNodeSelect, initialQuery, onQueryChange }: SearchProps) {
+  const [query, setQuery] = useState(initialQuery ?? '');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const rootRef = useRef(CompositionRoot.getInstance());
+  const searchClientRef = useRef<SearchWorkerClient | null>(null);
 
   const searchOpen = useUIStore((s) => s.searchOpen);
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
@@ -60,7 +67,10 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
     };
 
     try {
-      const result = await rootRef.current.searchUseCase.execute(searchQuery);
+      if (!searchClientRef.current) {
+        searchClientRef.current = new SearchWorkerClient(rootRef.current.searchUseCase);
+      }
+      const result = await searchClientRef.current.execute(searchQuery);
       for (const node of result) {
         const isWorkHit = Boolean(node.matchedTitle);
         addResult({
@@ -71,6 +81,7 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
           subtitle: `${getDynastyName(node.dynasty)} · ${isWorkHit ? '作品' : '诗人'}`,
           dynasty: node.dynasty,
           snippet: node.snippet,
+          labels: node.matchedLabels,
         });
       }
     } catch {
@@ -96,10 +107,18 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setQuery(value);
+    onQueryChange?.(value);
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => performSearch(value), 150);
   };
+
+  useEffect(() => {
+    const searchQuery = initialQuery?.trim();
+    if (!searchQuery) return;
+    const timer = setTimeout(() => performSearch(searchQuery), 0);
+    return () => clearTimeout(timer);
+  }, [initialQuery, performSearch]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!searchOpen) return;
@@ -189,6 +208,16 @@ export function Search({ nodes, onNodeSelect }: SearchProps) {
                 <div className="flex-1 min-w-0">
                   <div className="text-body text-white/80 font-medium truncate">{result.title}</div>
                   <div className="text-caption text-white/40 truncate">{result.subtitle}</div>
+                  {result.labels && result.labels.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="text-caption px-1.5 py-0.5 rounded border border-amber-300/40 text-amber-200/80 shrink-0">
+                        意境
+                      </span>
+                      <span className="text-caption text-amber-200/60 truncate">
+                        {result.labels.join(' · ')}
+                      </span>
+                    </div>
+                  )}
                   {result.snippet && (
                     <div className="text-caption text-white/30 truncate mt-0.5">{result.snippet}</div>
                   )}

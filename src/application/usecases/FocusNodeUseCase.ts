@@ -20,6 +20,9 @@ export class FocusNodeUseCase {
         dynasty: poet.dynasty,
         biography: poet.biography,
         workCount: poet.workCount,
+        hometown: poet.hometown ?? null,
+        hometownLatitude: poet.hometownLatitude ?? null,
+        hometownLongitude: poet.hometownLongitude ?? null,
       },
       score: score ? {
         poetId: score.poetId,

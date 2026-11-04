@@ -136,7 +136,7 @@ export function DimensionSlider({ onWeightsChange }: DimensionSliderProps) {
           <div className="space-y-4">
             <div>
               <div className="flex justify-between text-caption mb-1.5">
-                <span className="text-yellow-300/80">才气 Y</span>
+                <span className="text-yellow-300/80">才气 臂上散布</span>
                 <span className="text-white/40">{weights.talent.toFixed(1)}</span>
               </div>
               <input
@@ -152,7 +152,7 @@ export function DimensionSlider({ onWeightsChange }: DimensionSliderProps) {
 
             <div>
               <div className="flex justify-between text-caption mb-1.5">
-                <span className="text-blue-300/80">人气 Z</span>
+                <span className="text-blue-300/80">人气 盘面半径</span>
                 <span className="text-white/40">{weights.popularity.toFixed(1)}</span>
               </div>
               <input
@@ -168,7 +168,7 @@ export function DimensionSlider({ onWeightsChange }: DimensionSliderProps) {
 
             <div>
               <div className="flex justify-between text-caption mb-1.5">
-                <span className="text-green-300/80">运气 X</span>
+                <span className="text-green-300/80">运气 盘面高度</span>
                 <span className="text-white/40">{weights.luck.toFixed(1)}</span>
               </div>
               <input

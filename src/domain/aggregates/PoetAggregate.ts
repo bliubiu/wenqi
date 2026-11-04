@@ -1,7 +1,6 @@
 import { Poet } from '../entities/Poet';
 import { Work } from '../entities/Work';
 import { ThreeQi } from '../value-objects/ThreeQi';
-import { IncompatibleAlgorithmVersionError } from '../errors/DomainError';
 
 export class PoetAggregate {
   readonly poet: Poet;

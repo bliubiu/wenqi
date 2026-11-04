@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TalentScore, PopularityScore, LuckScore, ThreeQi, NodePosition } from '../ThreeQi';
+import { TalentScore, PopularityScore, LuckScore, NodePosition } from '../ThreeQi';
 
 describe('TalentScore', () => {
   it('应在合法值时创建成功', () => {

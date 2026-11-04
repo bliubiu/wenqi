@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { RelationService } from '../RelationService';
 import { GalaxyNode } from '../../entities/Node';
-import { Relation } from '../../entities/Relation';
 import { NodePosition } from '../../value-objects/ThreeQi';
 
 describe('RelationService', () => {
@@ -63,7 +62,6 @@ describe('RelationService', () => {
       }
       const relations = service.generateFromNodes(nodes);
       // 每个节点最多与后续50个节点配对
-      const expectedMax = 60 * 50 / 2; // 等差数列求和
       expect(relations.length).toBeLessThanOrEqual(50000);
       expect(relations.length).toBeGreaterThan(0);
     });

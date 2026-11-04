@@ -22,6 +22,7 @@ const DEFAULT_CONFIG: AppConfig = {
     maxNodes: 10000,
     maxEdges: 20000,
     lodThresholds: [50, 200, 800],
+    divergenceThreshold: 100,
   },
   scoring: {
     algorithmVersion: 'v1.0',
@@ -53,7 +54,7 @@ class ConfigLoader {
   private config: AppConfig;
 
   constructor() {
-    this.config = this.loadWithEnvOverrides(DEFAULT_CONFIG);
+    this.config = loadWithEnvOverrides(mergeWithInjectedConfig(DEFAULT_CONFIG));
   }
 
   get<T extends keyof AppConfig>(key: T): AppConfig[T] {
@@ -73,19 +74,47 @@ class ConfigLoader {
   getScoringWeights(): { talent: number; popularity: number; luck: number } {
     return { ...this.config.scoring.weights };
   }
+}
 
-  private loadWithEnvOverrides(defaults: AppConfig): AppConfig {
-    const cfg = { ...defaults };
+/** 判断是否为可递归合并的普通对象 */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
-    if (typeof process !== 'undefined' && process.env) {
-      const logLevel = process.env.WENQI_LOG_LEVEL as string;
-      if (logLevel && ['DEBUG', 'INFO', 'ERROR'].includes(logLevel)) {
-        cfg.logging = { ...cfg.logging, level: logLevel as LoggingConfig['level'] };
-      }
-    }
-
-    return cfg;
+/** 深合并：对象逐层合并，数组与基本类型整体覆盖 */
+export function mergeConfig<T>(base: T, override: unknown): T {
+  if (!isPlainObject(override) || !isPlainObject(base)) return base;
+  const result: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    const current = result[key];
+    result[key] = isPlainObject(value) && isPlainObject(current) ? mergeConfig(current, value) : value;
   }
+  return result as T;
+}
+
+/** 构建期由 next.config.js 注入的 application.yml 内容 */
+function mergeWithInjectedConfig(defaults: AppConfig): AppConfig {
+  const raw = typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_WENQI_CONFIG : undefined;
+  if (!raw) return defaults;
+  try {
+    return mergeConfig(defaults, JSON.parse(raw));
+  } catch {
+    console.warn('[配置] application.yml 注入内容解析失败，回退默认配置');
+    return defaults;
+  }
+}
+
+function loadWithEnvOverrides(defaults: AppConfig): AppConfig {
+  let cfg = defaults;
+
+  if (typeof process !== 'undefined' && process.env) {
+    const logLevel = process.env.WENQI_LOG_LEVEL as string;
+    if (logLevel && ['DEBUG', 'INFO', 'ERROR'].includes(logLevel)) {
+      cfg = { ...cfg, logging: { ...cfg.logging, level: logLevel as LoggingConfig['level'] } };
+    }
+  }
+
+  return cfg;
 }
 
 let globalConfig: ConfigLoader | null = null;

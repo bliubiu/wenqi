@@ -17,6 +17,9 @@ export interface PoetItem {
   dynasty: string;
   biography: string;
   workCount: number;
+  hometown?: string | null;
+  hometownLatitude?: number | null;
+  hometownLongitude?: number | null;
 }
 
 export interface ScoreItem {
@@ -26,6 +29,21 @@ export interface ScoreItem {
   talent: number;
   popularity: number;
   luck: number;
+  factors?: {
+    talent?: Record<string, number>;
+    popularity?: Record<string, number>;
+    luck?: Record<string, number>;
+    algorithmVersion?: string;
+  };
+}
+
+/** 文脉关系条目（sourceId/targetId 均为节点 ID：node_poet_xxx） */
+export interface RelationItem {
+  sourceId: string;
+  targetId: string;
+  type: string;
+  weight: number;
+  evidence?: { kind: string; titles?: string[]; quote?: string };
 }
 
 export interface SelectedPoetDetail {
@@ -35,6 +53,7 @@ export interface SelectedPoetDetail {
 }
 
 export type RendererType = 'webgl' | 'canvas2d' | 'text';
+export type LayoutMode = 'spiral' | 'geo';
 export type ConvergenceState = 'idle' | 'converging' | 'focused';
 export type LoadingStep = 'data' | 'wasm' | 'render' | 'scene' | 'done';
 
@@ -49,6 +68,14 @@ interface GalaxyStore {
   convergenceState: ConvergenceState;
   isDivergenceActive: boolean;
   rendererType: RendererType;
+  /** 布局模式：螺旋星系 / 籍贯地理投影 */
+  layoutMode: LayoutMode;
+  /** 当前聚焦诗人的文脉关系；null=未加载，[]=无关系 */
+  focusedRelations: RelationItem[] | null;
+  /** 双诗人对比面板是否展开 */
+  isCompareOpen: boolean;
+  /** 对比诗人 ID（null=未选择） */
+  comparePoetId: string | null;
 
   setLoading: (v: boolean) => void;
   setLoadingStep: (step: LoadingStep) => void;
@@ -59,6 +86,10 @@ interface GalaxyStore {
   setConvergenceState: (s: ConvergenceState) => void;
   setDivergenceActive: (v: boolean) => void;
   setRendererType: (t: RendererType) => void;
+  setLayoutMode: (m: LayoutMode) => void;
+  setFocusedRelations: (relations: RelationItem[] | null) => void;
+  setCompareOpen: (v: boolean) => void;
+  setComparePoetId: (id: string | null) => void;
 }
 
 export const useGalaxyStore = create<GalaxyStore>((set) => ({
@@ -72,6 +103,10 @@ export const useGalaxyStore = create<GalaxyStore>((set) => ({
   convergenceState: 'idle',
   isDivergenceActive: false,
   rendererType: 'webgl',
+  layoutMode: 'spiral',
+  focusedRelations: null,
+  isCompareOpen: false,
+  comparePoetId: null,
 
   setLoading: (v) => set({ isLoading: v }),
   setLoadingStep: (step) => set({ loadingStep: step }),
@@ -82,4 +117,8 @@ export const useGalaxyStore = create<GalaxyStore>((set) => ({
   setConvergenceState: (s) => set({ convergenceState: s }),
   setDivergenceActive: (v) => set({ isDivergenceActive: v }),
   setRendererType: (t) => set({ rendererType: t }),
+  setLayoutMode: (m) => set({ layoutMode: m }),
+  setFocusedRelations: (relations) => set({ focusedRelations: relations }),
+  setCompareOpen: (v) => set({ isCompareOpen: v }),
+  setComparePoetId: (id) => set({ comparePoetId: id }),
 }));

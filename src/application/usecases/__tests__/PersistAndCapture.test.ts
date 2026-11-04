@@ -89,4 +89,54 @@ describe('GenerateShareLinkUseCase', () => {
 
     expect(result.url).not.toContain('focus=');
   });
+
+  it('应携带时间区间与搜索态参数', () => {
+    const useCase = new GenerateShareLinkUseCase();
+    const result = useCase.execute({
+      cameraPosition: [1, 2, 3],
+      cameraTarget: [4, 5, 6],
+      focusedNodeId: null,
+      timeRange: { fromYear: 700, toYear: 1900 },
+      searchQuery: '孤寂',
+    });
+
+    const url = new URL(result.url);
+    expect(url.searchParams.get('yr')).toBe('700,1900');
+    expect(url.searchParams.get('q')).toBe('孤寂');
+  });
+
+  it('应从 URL 解析相机、时间区间与搜索态', () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/?cx=1&cy=2&cz=3&tx=4&ty=5&tz=6&focus=poet_1&yr=700,1900&q=' + encodeURIComponent('孤寂')
+    );
+
+    const parsed = new GenerateShareLinkUseCase().parseFromUrl();
+    expect(parsed).not.toBeNull();
+    expect(parsed!.cameraPosition).toEqual([1, 2, 3]);
+    expect(parsed!.cameraTarget).toEqual([4, 5, 6]);
+    expect(parsed!.focusedNodeId).toBe('poet_1');
+    expect(parsed!.timeRange).toEqual({ fromYear: 700, toYear: 1900 });
+    expect(parsed!.searchQuery).toBe('孤寂');
+
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('应生成携带漫游 ID 的直达链接', () => {
+    const useCase = new GenerateShareLinkUseCase();
+    expect(useCase.generateTourLink('mid-autumn-moon')).toContain('tour=mid-autumn-moon');
+  });
+
+  it('应从 URL 解析漫游 ID', () => {
+    window.history.replaceState({}, '', '/?tour=mid-autumn-moon');
+    expect(new GenerateShareLinkUseCase().parseTourIdFromUrl()).toBe('mid-autumn-moon');
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('无 tour 参数时应返回 null', () => {
+    window.history.replaceState({}, '', '/?cx=1');
+    expect(new GenerateShareLinkUseCase().parseTourIdFromUrl()).toBeNull();
+    window.history.replaceState({}, '', '/');
+  });
 });

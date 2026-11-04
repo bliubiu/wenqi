@@ -1,5 +1,5 @@
 import { GalaxyNode } from '../entities/Node';
-import { Relation, type RelationType, RELATION_TYPES } from '../entities/Relation';
+import { Relation, type RelationType } from '../entities/Relation';
 import { PoetAggregate } from '../aggregates/PoetAggregate';
 import { type RelationRepository } from '../ports/DataPorts';
 

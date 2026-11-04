@@ -22,7 +22,10 @@ export class Poet {
     public readonly birthDeath: YearRange | null = null,
     public readonly school: string | null = null,
     threeQi: ThreeQi | null = null,
-    public readonly workSummaries: WorkSummary[] = []
+    public readonly workSummaries: WorkSummary[] = [],
+    public readonly hometown?: string | null,
+    public readonly hometownLatitude?: number | null,
+    public readonly hometownLongitude?: number | null
   ) {
     this.threeQi = threeQi;
   }
@@ -42,6 +45,9 @@ export class Poet {
     pseudonym?: string | null;
     birthDeath?: { startYear: number | null; endYear: number | null } | null;
     school?: string | null;
+    hometown?: string | null;
+    hometownLatitude?: number | null;
+    hometownLongitude?: number | null;
     workSummaries?: WorkSummary[];
   }): Poet {
     return new Poet(
@@ -55,7 +61,10 @@ export class Poet {
       data.birthDeath ? new YearRange(data.birthDeath.startYear, data.birthDeath.endYear) : null,
       data.school ?? null,
       null,
-      data.workSummaries ?? []
+      data.workSummaries ?? [],
+      data.hometown ?? null,
+      data.hometownLatitude ?? null,
+      data.hometownLongitude ?? null
     );
   }
 }

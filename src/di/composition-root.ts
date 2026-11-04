@@ -6,17 +6,22 @@ import { AdjustDimensionUseCase } from '@/application/usecases/AdjustDimensionUs
 import { SwitchClusterUseCase } from '@/application/usecases/SwitchClusterUseCase';
 import { GetPoetDetailUseCase } from '@/application/usecases/GetPoetDetailUseCase';
 import { GetWorkDetailUseCase } from '@/application/usecases/GetWorkDetailUseCase';
+import { GetPoetRelationsUseCase } from '@/application/usecases/GetPoetRelationsUseCase';
 import { PersistViewUseCase } from '@/application/usecases/PersistViewUseCase';
 import { CaptureScreenshotUseCase } from '@/application/usecases/CaptureScreenshotUseCase';
 import { GenerateShareLinkUseCase } from '@/application/usecases/GenerateShareLinkUseCase';
+import { RecitationUseCase } from '@/application/usecases/RecitationUseCase';
+import { FavoritePoetsUseCase } from '@/application/usecases/FavoritePoetsUseCase';
 import { JsonPoetRepository } from '@/infrastructure/data/PoetRepository';
 import { JsonNodeRepository } from '@/infrastructure/data/NodeRepository';
 import { JsonScoreRepository } from '@/infrastructure/data/ScoreRepository';
 import { JsonWorkRepository } from '@/infrastructure/data/WorkRepository';
-import { JsonRelationRepository } from '@/infrastructure/data/RelationRepository';
-import { JsonGalaxyRepository } from '@/infrastructure/data/GalaxyRepository';
+import { ShardedRelationRepository } from '@/infrastructure/data/ShardedRelationRepository';
+import { JsonTourRepository } from '@/infrastructure/data/JsonTourRepository';
+import { SpeechSynthesisAdapter } from '@/infrastructure/audio/SpeechSynthesisAdapter';
 import { WasmBridge } from '@/infrastructure/wasm/bridge';
 import { ShardSearchIndex } from '@/infrastructure/search/ShardSearchIndex';
+import { ShardSemanticIndex } from '@/infrastructure/search/ShardSemanticIndex';
 import { LoggerFactory } from '@/infrastructure/logging/LoggerFactory';
 import { ConsoleLogger } from '@/infrastructure/logging/ConsoleLogger';
 import { IndexedDBLogger } from '@/infrastructure/logging/IndexedDBLogger';
@@ -35,15 +40,19 @@ export class CompositionRoot {
   readonly switchClusterUseCase: SwitchClusterUseCase;
   readonly getPoetDetailUseCase: GetPoetDetailUseCase;
   readonly getWorkDetailUseCase: GetWorkDetailUseCase;
+  readonly getPoetRelationsUseCase: GetPoetRelationsUseCase;
   readonly persistViewUseCase: PersistViewUseCase;
   readonly captureScreenshotUseCase: CaptureScreenshotUseCase;
   readonly generateShareLinkUseCase: GenerateShareLinkUseCase;
+  readonly recitationUseCase: RecitationUseCase;
+  readonly favoritePoetsUseCase: FavoritePoetsUseCase;
   readonly wasm: WasmBridge;
   readonly logger: ConsoleLogger;
   readonly dbLogger: IndexedDBLogger;
   readonly fileLogger?: FileLogger;
   readonly galaxy: Galaxy;
   readonly relationService: RelationService;
+  readonly tourRepository: JsonTourRepository;
 
   private static instance: CompositionRoot;
 
@@ -72,18 +81,30 @@ export class CompositionRoot {
     this.galaxy = new Galaxy();
     const layoutService = new LayoutService();
     this.relationService = new RelationService();
+    this.tourRepository = new JsonTourRepository();
 
     this.initializeUseCase = new InitializeUseCase(poetRepo, nodeRepo, scoreRepo, this.wasm);
-    this.searchUseCase = new SearchUseCase(nodeRepo, this.wasm, new ShardSearchIndex());
+    this.searchUseCase = new SearchUseCase(
+      nodeRepo,
+      this.wasm,
+      new ShardSearchIndex(),
+      new ShardSemanticIndex()
+    );
     this.focusNodeUseCase = new FocusNodeUseCase(poetRepo, scoreRepo);
     this.unfocusUseCase = new UnfocusUseCase(this.galaxy);
     this.adjustDimensionUseCase = new AdjustDimensionUseCase(this.galaxy, layoutService);
     this.switchClusterUseCase = new SwitchClusterUseCase(this.galaxy, layoutService);
     this.getPoetDetailUseCase = new GetPoetDetailUseCase(poetRepo, workRepo, scoreRepo);
     this.getWorkDetailUseCase = new GetWorkDetailUseCase(workRepo, poetRepo, scoreRepo);
+    this.getPoetRelationsUseCase = new GetPoetRelationsUseCase(
+      this.relationService,
+      new ShardedRelationRepository(this.relationService)
+    );
     this.persistViewUseCase = new PersistViewUseCase();
     this.captureScreenshotUseCase = new CaptureScreenshotUseCase();
     this.generateShareLinkUseCase = new GenerateShareLinkUseCase();
+    this.recitationUseCase = new RecitationUseCase(new SpeechSynthesisAdapter());
+    this.favoritePoetsUseCase = new FavoritePoetsUseCase();
   }
 
   async initialize(): Promise<void> {

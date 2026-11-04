@@ -11,7 +11,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { dynastyToTable, WORKS_TABLE_NAMES } from '../src/infrastructure/data/shard';
 
-export const SCHEMA_VERSION = '1';
+export const SCHEMA_VERSION = '2';
+export const RELATION_SCHEMA_VERSION = '2';
 export const DEFAULT_DB = 'data/wenqi.db';
 const BATCH_SIZE = 5000;
 
@@ -27,6 +28,27 @@ export interface PoetRow {
   pseudonym: string | null;
   birthDeath: { startYear: number | null; endYear: number | null } | null;
   school: string | null;
+  hometown: string | null;
+  hometownRegionId: string | null;
+  /** 籍贯区划坐标（由 regions 表 JOIN 派生，不单独存列） */
+  hometownLatitude?: number | null;
+  hometownLongitude?: number | null;
+}
+
+/** 区划行（cnkgraph 地理数据，坐标为区划中心点） */
+export interface RegionRow {
+  id: string;
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
+  parentId: string | null;
+  history: Array<{
+    name: string;
+    latitude: number | null;
+    longitude: number | null;
+    beginYear: number | null;
+    endYear: number | null;
+  }>;
 }
 
 export interface WorkRow {
@@ -65,6 +87,15 @@ export interface NodeRow {
   label: string | null;
 }
 
+/** 关系行（source/target 存诗人 ID，weight ∈ [0,1]，evidence 为 JSON 证据） */
+export interface RelationRow {
+  sourceId: string;
+  targetId: string;
+  type: string;
+  weight: number;
+  evidence: Record<string, unknown> | null;
+}
+
 /* ──── 连接与 schema ──── */
 
 export function openDatabase(dbPath: string = DEFAULT_DB, options: { create?: boolean; readonly?: boolean } = {}): Database {
@@ -92,9 +123,31 @@ export function createSchema(db: Database): void {
       courtesy_name TEXT,
       pseudonym TEXT,
       birth_death TEXT,
-      school TEXT
+      school TEXT,
+      hometown TEXT,
+      hometown_region_id TEXT
     );
     CREATE INDEX idx_poets_dynasty ON poets(dynasty);
+    CREATE TABLE regions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      latitude REAL,
+      longitude REAL,
+      parent_id TEXT,
+      history TEXT
+    );
+    CREATE INDEX idx_regions_parent ON regions(parent_id);
+    CREATE TABLE relations (
+      id TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      weight REAL NOT NULL,
+      evidence TEXT,
+      UNIQUE(source_id, target_id, type)
+    );
+    CREATE INDEX idx_relations_source ON relations(source_id);
+    CREATE INDEX idx_relations_type ON relations(type);
     CREATE TABLE scores (
       poet_id TEXT PRIMARY KEY,
       poet_name TEXT,
@@ -129,6 +182,7 @@ export function createSchema(db: Database): void {
       works_count INTEGER,
       scores_count INTEGER,
       nodes_count INTEGER,
+      relations_count INTEGER,
       duration_ms INTEGER
     );
   `);
@@ -160,6 +214,47 @@ export function rebuildDatabase(dbPath: string = DEFAULT_DB): Database {
   return db;
 }
 
+/**
+ * 就地迁移 schema v1 → v4：补建 regions 表、relations 表、poets.hometown / hometown_region_id
+ * 与 import_log.relations_count 列。
+ * 幂等可重复执行；全新建库（createSchema 已含新结构）时所有语句均无操作。
+ */
+export function ensureRelationsSchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS regions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      latitude REAL,
+      longitude REAL,
+      parent_id TEXT,
+      history TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_regions_parent ON regions(parent_id);
+    CREATE TABLE IF NOT EXISTS relations (
+      id TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      weight REAL NOT NULL,
+      evidence TEXT,
+      UNIQUE(source_id, target_id, type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_relations_source ON relations(source_id);
+    CREATE INDEX IF NOT EXISTS idx_relations_type ON relations(type);
+  `);
+  const poetsColumns = (db.query(`PRAGMA table_info(poets)`).all() as Array<{ name: string }>).map((c) => c.name);
+  if (!poetsColumns.includes('hometown')) {
+    db.exec('ALTER TABLE poets ADD COLUMN hometown TEXT');
+  }
+  if (!poetsColumns.includes('hometown_region_id')) {
+    db.exec('ALTER TABLE poets ADD COLUMN hometown_region_id TEXT');
+  }
+  const logColumns = (db.query(`PRAGMA table_info(import_log)`).all() as Array<{ name: string }>).map((c) => c.name);
+  if (!logColumns.includes('relations_count')) {
+    db.exec('ALTER TABLE import_log ADD COLUMN relations_count INTEGER');
+  }
+}
+
 /* ──── 批量插入 ──── */
 
 export function insertRows(db: Database, sql: string, rows: SQLQueryBindings[][]): { inserted: number; skipped: number } {
@@ -181,13 +276,42 @@ export function insertRows(db: Database, sql: string, rows: SQLQueryBindings[][]
 export function insertPoets(db: Database, poets: PoetRow[]): { inserted: number; skipped: number } {
   return insertRows(
     db,
-    'INSERT OR IGNORE INTO poets (id, name, dynasty, biography, work_count, courtesy_name, pseudonym, birth_death, school) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT OR IGNORE INTO poets (id, name, dynasty, biography, work_count, courtesy_name, pseudonym, birth_death, school, hometown, hometown_region_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     poets.map((p) => [
       p.id, p.name, p.dynasty, p.biography ?? null, p.workCount ?? 0,
       p.courtesyName ?? null, p.pseudonym ?? null,
       p.birthDeath ? JSON.stringify(p.birthDeath) : null, p.school ?? null,
+      p.hometown ?? null, p.hometownRegionId ?? null,
     ])
   );
+}
+
+/** 关系整表覆盖写入（幂等：先清空后批量插入） */
+export function replaceRelations(db: Database, relations: RelationRow[]): number {
+  db.exec('DELETE FROM relations');
+  const { inserted } = insertRows(
+    db,
+    'INSERT OR IGNORE INTO relations (id, source_id, target_id, type, weight, evidence) VALUES (?, ?, ?, ?, ?, ?)',
+    relations.map((r, i) => [
+      `rel_${String(i + 1).padStart(6, '0')}`,
+      r.sourceId, r.targetId, r.type, r.weight,
+      r.evidence ? JSON.stringify(r.evidence) : null,
+    ])
+  );
+  return inserted;
+}
+
+export function loadRelations(db: Database): RelationRow[] {
+  const rows = db
+    .query('SELECT source_id AS sourceId, target_id AS targetId, type, weight, evidence FROM relations')
+    .all() as any[];
+  return rows.map((r) => ({
+    sourceId: r.sourceId,
+    targetId: r.targetId,
+    type: r.type,
+    weight: r.weight,
+    evidence: r.evidence ? JSON.parse(r.evidence) : null,
+  }));
 }
 
 /** 作品按诗人朝代归表写入；未提供映射时按作品自身朝代 */
@@ -245,7 +369,11 @@ export function insertNodes(db: Database, nodes: NodeRow[]): { inserted: number;
 
 export function loadPoets(db: Database): PoetRow[] {
   const rows = db
-    .query('SELECT id, name, dynasty, biography, work_count AS workCount, courtesy_name AS courtesyName, pseudonym, birth_death AS birthDeathRaw, school FROM poets')
+    .query(`SELECT p.id, p.name, p.dynasty, p.biography, p.work_count AS workCount,
+      p.courtesy_name AS courtesyName, p.pseudonym, p.birth_death AS birthDeathRaw, p.school,
+      p.hometown, p.hometown_region_id AS hometownRegionId,
+      r.latitude AS hometownLatitude, r.longitude AS hometownLongitude
+      FROM poets p LEFT JOIN regions r ON r.id = p.hometown_region_id`)
     .all() as any[];
   return rows.map((r) => ({
     id: r.id,
@@ -257,7 +385,47 @@ export function loadPoets(db: Database): PoetRow[] {
     pseudonym: r.pseudonym ?? null,
     birthDeath: r.birthDeathRaw ? JSON.parse(r.birthDeathRaw) : null,
     school: r.school ?? null,
+    hometown: r.hometown ?? null,
+    hometownRegionId: r.hometownRegionId ?? null,
+    hometownLatitude: r.hometownLatitude ?? null,
+    hometownLongitude: r.hometownLongitude ?? null,
   }));
+}
+
+/** 区划整表覆盖写入（幂等：先清空后批量插入） */
+export function replaceRegions(db: Database, regions: RegionRow[]): number {
+  db.exec('DELETE FROM regions');
+  const { inserted } = insertRows(
+    db,
+    'INSERT INTO regions (id, name, latitude, longitude, parent_id, history) VALUES (?, ?, ?, ?, ?, ?)',
+    regions.map((r) => [
+      r.id, r.name, r.latitude ?? null, r.longitude ?? null,
+      r.parentId ?? null, r.history?.length ? JSON.stringify(r.history) : null,
+    ])
+  );
+  return inserted;
+}
+
+export function loadRegions(db: Database): RegionRow[] {
+  const rows = db
+    .query('SELECT id, name, latitude, longitude, parent_id AS parentId, history FROM regions')
+    .all() as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    latitude: r.latitude ?? null,
+    longitude: r.longitude ?? null,
+    parentId: r.parentId ?? null,
+    history: r.history ? JSON.parse(r.history) : [],
+  }));
+}
+
+/** 跨全部分表读取作品标题元数据（不含正文，供关系挖掘使用） */
+export function loadWorkTitles(db: Database): Array<Pick<WorkRow, 'id' | 'title' | 'poetId' | 'poetName' | 'dynasty' | 'genre'>> {
+  const unionSql = WORKS_TABLE_NAMES.map(
+    (t) => `SELECT id, title, poet_id AS poetId, poet_name AS poetName, dynasty, genre FROM ${t}`
+  ).join(' UNION ALL ');
+  return db.query(unionSql).all() as unknown as Array<Pick<WorkRow, 'id' | 'title' | 'poetId' | 'poetName' | 'dynasty' | 'genre'>>;
 }
 
 /** 跨全部分表读取作品（UNION ALL，保持分表顺序与行序） */
@@ -335,13 +503,14 @@ export interface StageLog {
   worksCount?: number | null;
   scoresCount?: number | null;
   nodesCount?: number | null;
+  relationsCount?: number | null;
   durationMs?: number | null;
 }
 
 export function logStage(db: Database, entry: StageLog): void {
   db.query(
-    `INSERT INTO import_log (imported_at, stage, dataset_version, source, poets_count, works_count, scores_count, nodes_count, duration_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO import_log (imported_at, stage, dataset_version, source, poets_count, works_count, scores_count, nodes_count, relations_count, duration_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     new Date().toISOString(),
     entry.stage,
@@ -351,6 +520,7 @@ export function logStage(db: Database, entry: StageLog): void {
     entry.worksCount ?? null,
     entry.scoresCount ?? null,
     entry.nodesCount ?? null,
+    entry.relationsCount ?? null,
     entry.durationMs ?? null
   );
 }

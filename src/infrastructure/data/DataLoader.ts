@@ -1,5 +1,6 @@
 import type { WorkShardData } from './shard';
 import { workShardRelPath } from './shard';
+import type { DailyPoemsData } from '@/domain/value-objects/DailyPoem';
 
 export interface BirthDeathInfo {
   startYear: number | null;
@@ -16,6 +17,9 @@ export interface Poet {
   pseudonym: string | null;
   birthDeath: BirthDeathInfo | null;
   school: string | null;
+  hometown?: string | null;
+  hometownLatitude?: number | null;
+  hometownLongitude?: number | null;
 }
 
 export interface Work {
@@ -28,14 +32,20 @@ export interface Work {
   text: string;
 }
 
+export interface ScoreDimensionResult {
+  value: number;
+  factors?: Record<string, number>;
+  algorithmVersion?: string;
+}
+
 export interface ScoreResult {
   poetId: string;
   poetName: string;
   dynasty: string;
   threeQi: {
-    talent: { value: number };
-    popularity: { value: number };
-    luck: { value: number };
+    talent: ScoreDimensionResult;
+    popularity: ScoreDimensionResult;
+    luck: ScoreDimensionResult;
   };
 }
 
@@ -52,6 +62,30 @@ export interface Node {
   phase: number;
   state: string;
   label: string;
+  /** 诗人生年（缺失时由初始化层回退朝代中值） */
+  birthYear?: number | null;
+}
+
+/** 诗人行迹的一个阶段（与 public/data/processed/journeys.json 的 stages 对齐） */
+export interface JourneyStage {
+  seq: number;
+  era: string;
+  place: string;
+  modern: string;
+  lng: number;
+  lat: number;
+  kind: string;
+  event: string;
+  poem?: string | null;
+}
+
+/** 一位诗人的行迹（出生、游历、任职、贬谪、隐居、卒等编年系地） */
+export interface Journey {
+  key: string;
+  name: string;
+  dynasty: string;
+  summary: string;
+  stages: JourneyStage[];
 }
 
 export interface Dataset {
@@ -168,6 +202,16 @@ export class DataLoader {
 
   async loadJson<T>(filename: string): Promise<T> {
     const version = await this.ensureVersion();
+    return this.loadWithCacheKey<T>(filename, version);
+  }
+
+  /** 以额外版本号参与缓存键的加载（如关系数据 relationVersion，独立于数据集版本演进） */
+  async loadVersionedJson<T>(filename: string, extraVersion: string): Promise<T> {
+    const version = await this.ensureVersion();
+    return this.loadWithCacheKey<T>(filename, `${version}:${extraVersion}`);
+  }
+
+  private async loadWithCacheKey<T>(filename: string, version: string): Promise<T> {
     const cacheKey = `${version}:${filename}`;
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey) as T;
@@ -207,12 +251,23 @@ export class DataLoader {
     return this.loadJson<ScoreResult[]>('scores.json');
   }
 
+  /** 每日一诗年度日历（构建期生成，366 天） */
+  async loadDailyPoems(): Promise<DailyPoemsData> {
+    return this.loadJson<DailyPoemsData>('daily-poems.json');
+  }
+
   async loadNodes(): Promise<Node[]> {
     return this.loadJson<Node[]>('nodes.json');
   }
 
   async loadSpatialIndex(): Promise<SpatialIndex> {
     return this.loadJson<SpatialIndex>('spatial-index.json');
+  }
+
+  /** 诗人行迹数据集（代表性诗人精选，由 scripts/build-journeys.py 生成） */
+  async loadJourneys(): Promise<Journey[]> {
+    const data = await this.loadJson<{ journeys: Journey[] }>('journeys.json');
+    return data.journeys;
   }
 
   async loadDataset(): Promise<Dataset> {

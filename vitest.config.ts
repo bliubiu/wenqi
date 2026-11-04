@@ -36,6 +36,7 @@ export default defineConfig({
       '@infrastructure': path.resolve(__dirname, './src/infrastructure'),
       '@presentation': path.resolve(__dirname, './src/presentation'),
       'bun:test': path.resolve(__dirname, './tests/bun-test-shim.ts'),
+      'bun:sqlite': path.resolve(__dirname, './tests/bun-sqlite-shim.ts'),
     },
   },
 });

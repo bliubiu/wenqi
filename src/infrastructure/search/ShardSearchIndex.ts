@@ -65,18 +65,22 @@ export class ShardSearchIndex implements FullTextSearchPort {
     await this.ensureLoaded();
     if (!this.items || !this.poetDict) return [];
 
+    const exactHits: FullTextHit[] = [];
     const titleHits: FullTextHit[] = [];
     const textHits: FullTextHit[] = [];
 
     for (const [poetIdx, title, text] of this.items) {
-      if (title.includes(q)) {
-        titleHits.push({ workId: '', poetId: this.poetDict[poetIdx], poetName: '', title, snippet: text });
+      const hit = { workId: '', poetId: this.poetDict[poetIdx], poetName: '', title, snippet: text };
+      if (title === q) {
+        exactHits.push(hit);
+      } else if (title.includes(q)) {
+        titleHits.push(hit);
       } else if (text.includes(q)) {
-        textHits.push({ workId: '', poetId: this.poetDict[poetIdx], poetName: '', title, snippet: text });
+        textHits.push(hit);
       }
-      if (titleHits.length >= limit) break;
     }
 
-    return [...titleHits, ...textHits].slice(0, limit);
+    // 标题全等优先，其次标题包含，最后正文命中
+    return [...exactHits, ...titleHits, ...textHits].slice(0, limit);
   }
 }

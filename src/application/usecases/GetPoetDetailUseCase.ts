@@ -59,6 +59,14 @@ export class GetPoetDetailUseCase {
           talent: score.threeQi.talent.value,
           popularity: score.threeQi.popularity.value,
           luck: score.threeQi.luck.value,
+          factors: score.threeQi.talent.factors || score.threeQi.popularity.factors || score.threeQi.luck.factors
+            ? {
+                talent: score.threeQi.talent.factors,
+                popularity: score.threeQi.popularity.factors,
+                luck: score.threeQi.luck.factors,
+                algorithmVersion: score.threeQi.talent.algorithmVersion,
+              }
+            : undefined,
         } : null,
         node: {
           id: request.poetId,

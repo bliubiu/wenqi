@@ -26,7 +26,11 @@ const mockScoreRepo: ScoreRepository = {
     poetId: 'poet_1',
     poetName: '李白',
     dynasty: 'TANG',
-    threeQi: { talent: { value: 85 }, popularity: { value: 90 }, luck: { value: 10 } },
+    threeQi: {
+      talent: { value: 85, factors: { lexicalUniqueness: 72.5, imageryNovelty: 88 } },
+      popularity: { value: 90, factors: { citationCount: 120, textbookCount: 3 } },
+      luck: { value: 10, factors: { politicalEnvironment: 8, rediscoveryEvents: 2 } },
+    },
   }),
 };
 
@@ -39,6 +43,9 @@ describe('GetPoetDetailUseCase', () => {
     expect(result.poet.poet.courtesyName).toBe('太白');
     expect(result.poet.score).not.toBeNull();
     expect(result.poet.score!.talent).toBe(85);
+    expect(result.poet.score!.factors?.talent?.lexicalUniqueness).toBe(72.5);
+    expect(result.poet.score!.factors?.popularity?.citationCount).toBe(120);
+    expect(result.poet.score!.factors?.luck?.rediscoveryEvents).toBe(2);
     expect(result.works.length).toBe(1);
     expect(result.works[0].title).toBe('静夜思');
   });

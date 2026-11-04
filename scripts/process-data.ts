@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { rebuildDatabase, insertPoets, insertWorks, setMeta, logStage, DEFAULT_DB, type PoetRow, type WorkRow } from './db-core';
+import { toSimplified } from '../src/infrastructure/text/t2s';
 
 // 朝代枚举
 enum DynastyCode {
@@ -810,6 +811,43 @@ function flattenParagraphs(content: any): string[] {
   return [];
 }
 
+/** 古文观止篇目标注的朝代前缀 */
+const GUWEN_DYNASTIES: Array<[string, DynastyCode]> = [
+  ['近现代', DynastyCode.Modern],
+  ['先秦', DynastyCode.PreQin],
+  ['西汉', DynastyCode.Han],
+  ['东汉', DynastyCode.Han],
+  ['南北朝', DynastyCode.WeiJin],
+  ['魏晋', DynastyCode.WeiJin],
+  ['三国', DynastyCode.WeiJin],
+  ['五代', DynastyCode.FiveDynasties],
+  ['秦', DynastyCode.PreQin],
+  ['汉', DynastyCode.Han],
+  ['晋', DynastyCode.WeiJin],
+  ['隋', DynastyCode.WeiJin],
+  ['唐', DynastyCode.Tang],
+  ['宋', DynastyCode.Song],
+  ['元', DynastyCode.Yuan],
+  ['明', DynastyCode.Ming],
+  ['清', DynastyCode.Qing],
+];
+
+/**
+ * 解析古文观止篇目的作者标注，形如「宋代：蘇軾」
+ */
+function parseGuwenAuthor(raw: string, fallback: DynastyCode): { name: string; dynasty: DynastyCode } {
+  const text = (raw || '').trim();
+  if (!text) return { name: '佚名（古文观止）', dynasty: fallback };
+
+  const sepIndex = Math.max(text.indexOf('：'), text.indexOf(':'));
+  if (sepIndex < 0) return { name: toSimplified(text), dynasty: fallback };
+
+  const prefix = text.slice(0, sepIndex).trim();
+  const name = toSimplified(text.slice(sepIndex + 1).trim()) || '佚名（古文观止）';
+  const matched = GUWEN_DYNASTIES.find(([key]) => prefix.includes(key));
+  return { name, dynasty: matched ? matched[1] : fallback };
+}
+
 /**
  * 处理蒙学数据
  */
@@ -843,6 +881,42 @@ function processMengXue(): { poets: PoetRaw[]; works: WorkRaw[] } {
 
     const data = readJsonFile<any>(fp);
     if (!data) continue;
+
+    // 古文观止按篇拆分，每篇独立成作品，作者归属原作家
+    if (cfg.file === 'guwenguanzhi.json') {
+      const gwData: any = data;
+      let pieceCount = 0;
+      for (const juan of gwData.content ?? []) {
+        for (const piece of juan?.content ?? []) {
+          const paragraphs = flattenParagraphs(piece.paragraphs);
+          if (paragraphs.length === 0) continue;
+
+          const { name, dynasty } = parseGuwenAuthor(piece.author ?? '', cfg.dynasty);
+          const poetId = `poet_${dynasty.toLowerCase()}_${name}`;
+          if (!seenPoets.has(`${name}_${dynasty}`)) {
+            seenPoets.add(`${name}_${dynasty}`);
+            poets.push({
+              id: poetId,
+              name,
+              dynasty,
+              description: `《古文观止》所收${name}之文。`,
+            });
+          }
+
+          works.push({
+            id: `work_gw_${String(pieceCount).padStart(3, '0')}`,
+            title: toSimplified(piece.chapter || '无题'),
+            author: name,
+            dynasty,
+            genre: GenreCode.Wen,
+            paragraphs,
+          });
+          pieceCount++;
+        }
+      }
+      console.log(`  ${cfg.title}: 拆分为 ${pieceCount} 篇`);
+      continue;
+    }
 
     // 提取段落
     let paragraphs: string[] = [];
@@ -1182,6 +1256,8 @@ function main() {
     pseudonym: p.pseudonym,
     birthDeath: p.birthDeath,
     school: p.school,
+    hometown: null,
+    hometownRegionId: null,
   }));
   const poetsResult = insertPoets(db, poetRows);
   console.log(`  poets 表: ${poetsResult.inserted} 位${poetsResult.skipped > 0 ? `（跳过重复 ID ${poetsResult.skipped} 条）` : ''}`);
@@ -1203,7 +1279,13 @@ function main() {
   }
   console.log(`  works 分表合计: ${workTotal} 首`);
 
-  const datasetVersion = '2026.06.24';
+  // 版本号参与前端 IndexedDB 缓存键，每次重建必须变化，否则浏览器会读旧分片
+  const now = new Date();
+  const datasetVersion = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('.') + '.' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
   setMeta(db, 'schema_version', '1');
   setMeta(db, 'dataset_version', datasetVersion);
   setMeta(db, 'algorithm_version', 'v1.0');

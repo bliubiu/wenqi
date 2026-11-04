@@ -3,6 +3,8 @@ import { Node } from '@/infrastructure/data/DataLoader';
 
 export class LabelRenderer {
   private sprites: THREE.Sprite[] = [];
+  /** 与 sprites 一一对应的节点引用（动画插值按节点匹配，避免顺序假设） */
+  private labelNodes: Node[] = [];
 
   constructor(private scene: THREE.Scene) {}
 
@@ -14,34 +16,29 @@ export class LabelRenderer {
       sprite.position.set(n.position.x, n.position.y + n.size + 1.5, n.position.z);
       this.scene.add(sprite);
       this.sprites.push(sprite);
+      this.labelNodes.push(n);
     }
   }
 
   updateProgress(
     focusNode: Node,
-    relatedNodes: Node[],
     targetPositions: Map<string, THREE.Vector3>,
     progress: number
   ): void {
     const focusTarget = targetPositions.get(focusNode.id);
     if (!focusTarget) return;
 
-    let idx = 0;
-    const apply = (n: Node, targetPos: THREE.Vector3) => {
+    for (let idx = 0; idx < this.labelNodes.length; idx++) {
+      const n = this.labelNodes[idx];
+      const targetPos = targetPositions.get(n.id);
+      if (!targetPos) continue;
       const sx = n.position.x + (targetPos.x - n.position.x) * progress;
       const sy = n.position.y + (targetPos.y - n.position.y) * progress;
       const sz = n.position.z + (targetPos.z - n.position.z) * progress;
-      const size = focusNode && n.id === focusNode.id ? n.size * 1.5 : n.size;
+      const size = n.id === focusNode.id ? n.size * 1.5 : n.size;
       if (this.sprites[idx]) {
         this.sprites[idx].position.set(sx, sy + size + 1.5, sz);
       }
-      idx++;
-    };
-
-    apply(focusNode, focusTarget);
-    for (const rn of relatedNodes) {
-      const t = targetPositions.get(rn.id);
-      if (t) apply(rn, t);
     }
   }
 
@@ -52,6 +49,7 @@ export class LabelRenderer {
       sprite.material.dispose();
     }
     this.sprites = [];
+    this.labelNodes = [];
   }
 
   private createSprite(text: string): THREE.Sprite {

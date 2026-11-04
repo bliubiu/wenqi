@@ -21,7 +21,8 @@ rendering:
   targetFps: 60
   maxNodes: 10000
   maxEdges: 20000
-  lodThresholds: [50, 200, 800]
+  lodThresholds: [50, 200, 800]   # 相机距离 LOD 阈值（近/中/远）
+  divergenceThreshold: 100        # 拉远进入气团聚合视图的距离阈值
 
 # 评分算法
 scoring:

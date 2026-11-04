@@ -44,6 +44,32 @@ export const DYNASTY_COLOR_HEX: Record<DynastyCode, string> = {
   MODERN: '#5A8C7A',
 };
 
+export interface DynastyYearRange {
+  start: number;
+  end: number;
+}
+
+/** 朝代大致起止年份（公元纪年，负数表示公元前），用于时间轴色带与生年缺失兜底 */
+export const DYNASTY_YEAR_RANGES: Record<DynastyCode, DynastyYearRange> = {
+  PRE_QIN: { start: -1046, end: -221 },
+  HAN: { start: -202, end: 220 },
+  WEI_JIN: { start: 220, end: 589 },
+  TANG: { start: 618, end: 907 },
+  FIVE_DYNASTIES: { start: 907, end: 979 },
+  SONG: { start: 960, end: 1279 },
+  YUAN: { start: 1271, end: 1368 },
+  MING: { start: 1368, end: 1644 },
+  QING: { start: 1636, end: 1912 },
+  MODERN: { start: 1912, end: 2026 },
+};
+
 export function getDynastyName(code: string): string {
   return DYNASTY_LABELS[code as DynastyCode] || code;
+}
+
+/** 朝代中值年份：诗人生年缺失时的回退口径 */
+export function getDynastyMedianYear(code: string): number {
+  const range = DYNASTY_YEAR_RANGES[code as DynastyCode];
+  if (!range) return 0;
+  return Math.round((range.start + range.end) / 2);
 }

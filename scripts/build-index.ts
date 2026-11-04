@@ -54,6 +54,65 @@ interface SpatialIndexData {
   };
 }
 
+/** 星系旋臂参数 */
+const SPIRAL_ARMS = 4;
+const DISK_INNER = 8;
+const DISK_OUTER = 58;
+
+/** FNV-1a 哈希，用于确定性扰动，保证重建数据后坐标稳定 */
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function hashRandom(seed: string, salt: number): number {
+  return hashString(`${seed}:${salt}`) / 4294967295;
+}
+
+/**
+ * 将三气评分投影到旋臂星系
+ * - 人气决定半径：越高越靠近明亮核心
+ * - 才气决定偏离旋臂轴的幅度：才气越高越贴近旋臂
+ * - 运气决定盘面高度
+ */
+function projectToSpiral(
+  poetId: string,
+  qi: { talent: number; popularity: number; luck: number }
+): NodePosition {
+  const popularity = Math.max(0, Math.min(100, qi.popularity ?? 0)) / 100;
+  const talent = Math.max(0, Math.min(100, qi.talent ?? 0)) / 100;
+  const luck = Math.max(-50, Math.min(50, qi.luck ?? 0)) / 50;
+
+  // 人气主导径向，近半由噪声决定，避免同分诗人挤成同心环
+  const radialScore = 0.55 * (1 - Math.pow(popularity, 0.8)) + 0.45 * hashRandom(poetId, 7);
+  const baseRadius = DISK_INNER + radialScore * (DISK_OUTER - DISK_INNER);
+  const arm = hashString(poetId) % SPIRAL_ARMS;
+  const spiralAngle = (arm / SPIRAL_ARMS) * Math.PI * 2 + Math.log(baseRadius / DISK_INNER) * 2.2
+    + Math.sin(baseRadius * 0.18 + arm * 1.7) * 0.45;
+  const scatter = ((1 - talent) * 0.9 + 0.25) * (0.8 + 0.4 * hashRandom(poetId, 11));
+  const angle = spiralAngle + (hashRandom(poetId, 1) - 0.5) * scatter;
+
+  // 连续噪声扰动半径，形成云絮状团块而非同心环
+  const clump = Math.sin(baseRadius * 0.42 + angle * 2.2) * 2.5;
+  const coreSpread = popularity > 0.85 ? hashRandom(poetId, 6) * 8 : 0;
+  const radius = Math.max(12,
+    baseRadius + clump + (hashRandom(poetId, 5) - 0.5) * 8 + coreSpread);
+
+  const thickness = 2 + (1 - popularity) * 6;
+  const gaussian = (hashRandom(poetId, 2) + hashRandom(poetId, 3) + hashRandom(poetId, 4) - 1.5) / 1.5;
+  const height = luck * 10 + gaussian * thickness + (hashRandom(poetId, 8) - 0.5) * 4;
+
+  return {
+    x: Math.cos(angle) * radius,
+    y: height,
+    z: Math.sin(angle) * radius,
+  };
+}
+
 /**
  * 构建 KD-Tree
  */
@@ -133,11 +192,11 @@ function main() {
   // 构建节点
   console.log('\n构建节点数据...');
   const nodes: Node[] = scores.map((score) => {
-    const position: NodePosition = {
-      x: score.threeQi.luck.value ?? 0,        // 运气轴
-      y: score.threeQi.talent.value ?? 0,      // 才气轴
-      z: score.threeQi.popularity.value ?? 0,  // 人气轴
-    };
+    const position: NodePosition = projectToSpiral(score.poetId, {
+      talent: score.threeQi.talent.value ?? 0,
+      popularity: score.threeQi.popularity.value ?? 0,
+      luck: score.threeQi.luck.value ?? 0,
+    });
 
     return {
       id: `node_${score.poetId}`,
@@ -218,8 +277,8 @@ function main() {
   console.log('\n=== 测试查询 ===');
 
   // 测试半径查询
-  console.log('\n测试半径查询 (中心点: x=10, y=50, z=30, 半径: 20):');
-  const testCenter = { x: 10, y: 50, z: 30 };
+  console.log('\n测试半径查询 (中心点: x=0, y=0, z=0, 半径: 20):');
+  const testCenter = { x: 0, y: 0, z: 0 };
   const testRadius = 20;
 
   const nearbyNodes = nodes.filter((node) => {

@@ -37,7 +37,7 @@ function fail(message: string): never {
 }
 
 /** 作品哈希分桶（djb2）：分片路径固定，前端无需索引查询 */
-function shardOf(workId: string): number {
+export function shardOf(workId: string): number {
   let hash = 5381;
   for (let i = 0; i < workId.length; i++) {
     hash = ((hash << 5) + hash + workId.charCodeAt(i)) >>> 0;
@@ -176,5 +176,7 @@ function main(): void {
   console.log('\n=== 构建完成 ===');
 }
 
-main();
+if (import.meta.main) {
+  main();
+}
 

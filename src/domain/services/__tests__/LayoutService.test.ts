@@ -2,7 +2,6 @@ import { describe, it, expect } from 'bun:test';
 import { LayoutService } from '../LayoutService';
 import { GalaxyNode } from '../../entities/Node';
 import { Relation } from '../../entities/Relation';
-import { QiCluster } from '../../entities/QiCluster';
 import { NodePosition } from '../../value-objects/ThreeQi';
 
 function makeNode(id: string, x: number, y: number, z: number): GalaxyNode {

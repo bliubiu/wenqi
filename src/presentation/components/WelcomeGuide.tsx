@@ -20,10 +20,9 @@ export function WelcomeGuide() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const shown = localStorage.getItem(GUIDE_KEY);
-    if (!shown) {
-      setVisible(true);
-    }
+    if (localStorage.getItem(GUIDE_KEY)) return;
+    const timer = setTimeout(() => setVisible(true), 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleDismiss = () => {

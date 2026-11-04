@@ -13,9 +13,13 @@ export interface NodeDTO {
   size: number;
   brightness: number;
   label: string;
+  /** 诗人生年（缺失时取朝代中值），供时间轴回放使用 */
+  birthYear?: number | null;
   /** 全文检索命中时的展示信息 */
   matchedTitle?: string;
   snippet?: string;
+  /** 语义（意境）通道命中时的标签 */
+  matchedLabels?: string[];
 }
 
 export interface PoetDTO {
@@ -27,12 +31,23 @@ export interface PoetDTO {
   courtesyName?: string | null;
   pseudonym?: string | null;
   school?: string | null;
+  hometown?: string | null;
+  hometownLatitude?: number | null;
+  hometownLongitude?: number | null;
 }
 
 export interface PoetDetailDTO {
   poet: PoetDTO;
   score: ScoreDTO | null;
   node: NodeDTO;
+}
+
+/** 三气评分构成因子（键为因子名，值为原始分） */
+export interface ScoreFactorDTO {
+  talent?: Record<string, number>;
+  popularity?: Record<string, number>;
+  luck?: Record<string, number>;
+  algorithmVersion?: string;
 }
 
 export interface ScoreDTO {
@@ -42,6 +57,8 @@ export interface ScoreDTO {
   talent: number;
   popularity: number;
   luck: number;
+  /** 评分构成明细（旧数据可能缺失） */
+  factors?: ScoreFactorDTO;
 }
 
 export interface ThreeQiDTO {
@@ -57,6 +74,7 @@ export interface RelationDTO {
   targetId: string;
   relationType: string;
   weight: number;
+  evidence?: { kind: string; titles?: string[]; quote?: string };
 }
 
 export interface QiClusterDTO {

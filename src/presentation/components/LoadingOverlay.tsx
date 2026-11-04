@@ -27,8 +27,8 @@ export function LoadingOverlay({ isLoading, steps, currentStep }: LoadingOverlay
 
   useEffect(() => {
     if (!isLoading) {
-      setCharIndex(0);
-      return;
+      const timer = setTimeout(() => setCharIndex(0), 0);
+      return () => clearTimeout(timer);
     }
     const interval = setInterval(() => {
       setCharIndex((prev) => {
