@@ -23,6 +23,7 @@ export function StarList({ onFocusPoet }: StarListProps) {
         onClick={() => setOpen((v) => !v)}
         className="glass-panel text-white p-2.5 rounded-lg hover:bg-glass-heavy transition-all duration-200 active:scale-95 relative"
         title="我的星单"
+        aria-label="我的星单"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -40,7 +41,7 @@ export function StarList({ onFocusPoet }: StarListProps) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 glass-panel-medium text-white p-4 w-64 animate-fade-in-scale shadow-xl">
+        <div data-testid="star-list-panel" className="absolute right-0 top-12 glass-panel-medium text-white p-4 w-64 animate-fade-in-scale shadow-xl">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-title text-white/90">我的星单</h3>
             {items.length > 0 && (

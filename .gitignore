@@ -39,6 +39,10 @@ Thumbs.db
 coverage/
 *.lcov
 
+# E2E 测试产物
+e2e-report/
+test-results/
+
 # Rust（应用项目，推送 Cargo.lock 确保可重复构建）
 *.rs.bk
 

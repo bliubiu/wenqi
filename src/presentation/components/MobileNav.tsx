@@ -9,7 +9,7 @@ function triggerClick(selector: string): void {
 
 export function MobileNav() {
   return (
-    <div className="sm:hidden fixed bottom-0 inset-x-0 z-50 glass-panel-heavy border-t border-white/10 rounded-t-xl">
+    <div data-testid="mobile-nav" className="sm:hidden fixed bottom-0 inset-x-0 z-50 glass-panel-heavy border-t border-white/10 rounded-t-xl">
       <div className="flex items-center justify-around py-2 px-4">
         <button
           onClick={() => useTourStore.getState().setPickerOpen(true)}

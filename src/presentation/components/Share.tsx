@@ -254,10 +254,10 @@ export function Share({
   };
 
   return (
-    <div className="hidden sm:block absolute top-4 right-4 z-50">
+    <div className="absolute top-4 right-4 z-50">
       <button
         onClick={toggleShare}
-        className="glass-panel text-white p-2.5 rounded-lg hover:bg-glass-heavy transition-all duration-200 active:scale-95"
+        className="hidden sm:block glass-panel text-white p-2.5 rounded-lg hover:bg-glass-heavy transition-all duration-200 active:scale-95"
         title="分享"
         data-nav-trigger="share"
       >
@@ -277,7 +277,7 @@ export function Share({
       </button>
 
       {sharePanelOpen && (
-        <div className="absolute right-0 top-12 glass-panel-medium text-white p-5 w-72 animate-fade-in-scale shadow-xl">
+        <div data-testid="share-panel" className="absolute right-0 top-12 glass-panel-medium text-white p-5 w-72 animate-fade-in-scale shadow-xl">
           <h3 className="text-title text-white/90 mb-4">分享</h3>
 
           <button
@@ -328,6 +328,7 @@ export function Share({
             <div className="flex">
               <input
                 type="text"
+                data-testid="share-url"
                 value={shareUrl || '点击生成分享链接'}
                 readOnly
                 className="flex-1 px-3 py-2 bg-white/5 rounded-l-lg text-caption text-white/50"

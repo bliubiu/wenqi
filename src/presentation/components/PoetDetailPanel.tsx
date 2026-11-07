@@ -194,7 +194,7 @@ export function PoetDetailPanel({ poet, relations, onFocusPoet, onCompare, onClo
 
   if (selectedWork) {
     return (
-      <div className="absolute inset-x-0 bottom-0 sm:right-4 sm:top-4 sm:inset-x-auto text-[#E8E0D0] p-5 sm:p-7 rounded-t-2xl sm:rounded-2xl w-full sm:w-[36rem] max-h-[75vh] sm:max-h-[85vh] overflow-y-auto border border-[#2A2820] shadow-xl"
+      <div data-testid="work-detail-panel" className="absolute inset-x-0 bottom-0 sm:right-4 sm:top-4 sm:inset-x-auto text-[#E8E0D0] p-5 sm:p-7 rounded-t-2xl sm:rounded-2xl w-full sm:w-[36rem] max-h-[75vh] sm:max-h-[85vh] overflow-y-auto border border-[#2A2820] shadow-xl"
         style={{ background: 'rgba(10,10,18,0.92)', backdropFilter: 'blur(16px)' }}>
         <div className="sm:hidden flex justify-center mb-4 pt-1">
           <div className="w-8 h-1 rounded-full bg-white/10"></div>
@@ -243,7 +243,7 @@ export function PoetDetailPanel({ poet, relations, onFocusPoet, onCompare, onClo
   }
 
   return (
-    <div className="absolute inset-x-0 bottom-0 sm:right-4 sm:top-4 sm:inset-x-auto text-[#E8E0D0] p-5 sm:p-6 rounded-t-2xl sm:rounded-2xl w-full sm:w-80 max-h-[65vh] sm:max-h-[80vh] overflow-y-auto border border-[#2A2820] shadow-xl"
+    <div data-testid="poet-detail-panel" className="absolute inset-x-0 bottom-0 sm:right-4 sm:top-4 sm:inset-x-auto text-[#E8E0D0] p-5 sm:p-6 rounded-t-2xl sm:rounded-2xl w-full sm:w-80 max-h-[65vh] sm:max-h-[80vh] overflow-y-auto border border-[#2A2820] shadow-xl"
       style={{ background: 'rgba(10,10,18,0.88)', backdropFilter: 'blur(14px)' }}>
       <div className="sm:hidden flex justify-center mb-3 pt-1">
         <div className="w-8 h-1 rounded-full bg-white/10"></div>
@@ -251,7 +251,7 @@ export function PoetDetailPanel({ poet, relations, onFocusPoet, onCompare, onClo
 
       <div className="flex justify-between items-start mb-5">
         <div>
-          <h3 className="text-xl font-serif tracking-wider text-[#E8E0D0]/90">{poet.name}</h3>
+          <h3 data-testid="poet-name" className="text-xl font-serif tracking-wider text-[#E8E0D0]/90">{poet.name}</h3>
           <div className="mt-2 w-8 h-0.5 bg-gradient-to-r from-[#C23B22]/70 to-transparent"></div>
         </div>
         <div className="flex items-center gap-1 -mr-1">

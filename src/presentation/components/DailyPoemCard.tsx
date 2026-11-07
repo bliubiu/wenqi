@@ -42,7 +42,7 @@ export function DailyPoemCard({ onFocusPoet }: DailyPoemCardProps) {
   };
 
   return (
-    <div className="hidden sm:block absolute bottom-14 left-4 z-50 w-72">
+    <div data-testid="daily-poem-card" className="hidden sm:block absolute bottom-14 left-4 z-50 w-72">
       <div className="glass-panel-medium p-4 animate-fade-in-scale">
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">

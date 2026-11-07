@@ -197,10 +197,11 @@ export function Search({ nodes, onNodeSelect, initialQuery, onQueryChange }: Sea
       </div>
 
       {searchOpen && results.length > 0 && (
-        <div ref={resultsRef} className="absolute top-full left-0 right-0 mt-2 glass-panel-heavy max-h-96 overflow-y-auto z-50 animate-fade-in-up">
+        <div ref={resultsRef} data-testid="search-results" className="absolute top-full left-0 right-0 mt-2 glass-panel-heavy max-h-96 overflow-y-auto z-50 animate-fade-in-up">
           {results.map((result, index) => (
             <div
               key={result.id}
+              data-testid="search-result-item"
               onClick={() => handleSelectResult(result)}
               className={`px-4 py-3 cursor-pointer transition-colors duration-150 ${index === selectedIndex ? 'bg-white/10' : 'hover:bg-white/5'}`}
             >

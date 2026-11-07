@@ -125,6 +125,7 @@ export function TourOverlay() {
       {pickerOpen && status === 'idle' && (
         <div className="absolute inset-0 flex items-center justify-center p-4">
           <div
+            data-testid="tour-picker"
             className="pointer-events-auto w-full max-w-md max-h-[80vh] overflow-y-auto rounded-2xl border border-[#2A2820] text-[#E8E0D0] p-5 sm:p-6 shadow-xl animate-fade-in-scale"
             style={{ background: 'rgba(10,10,18,0.92)', backdropFilter: 'blur(14px)' }}
           >
@@ -171,6 +172,7 @@ export function TourOverlay() {
       {active && (
         <div className="absolute bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-2xl pointer-events-auto">
           <div
+            data-testid="tour-player"
             className="rounded-2xl border border-[#2A2820] text-[#E8E0D0] px-4 py-3 sm:px-5 sm:py-4 shadow-xl"
             style={{ background: 'rgba(10,10,18,0.9)', backdropFilter: 'blur(14px)' }}
           >

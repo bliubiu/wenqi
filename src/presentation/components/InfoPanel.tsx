@@ -38,7 +38,7 @@ export function InfoPanel({
     <div className="absolute top-4 left-4 glass-panel text-white p-3 sm:p-4 animate-fade-in-up max-w-[160px] sm:max-w-none">
       <h2 className="text-title mb-2 text-white/90">文气星系</h2>
       <div className="space-y-0.5 text-caption text-white/60">
-        <p><span className="text-white/40">星河 </span>{nodeCount.toLocaleString()} 星</p>
+        <p data-testid="node-count"><span className="text-white/40">星河 </span>{nodeCount.toLocaleString()} 星</p>
         <p><span className="text-white/40">渲染 </span>{rendererLabel}</p>
         {rendererType === 'webgl' && (
           <>

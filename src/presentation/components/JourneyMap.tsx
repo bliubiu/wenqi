@@ -109,7 +109,7 @@ export function JourneyMap({ journey }: JourneyMapProps) {
 
   if (!journey) {
     return (
-      <div className="text-xs text-[#E8E0D0]/35 leading-relaxed py-8 text-center">
+      <div data-testid="journey-empty" className="text-xs text-[#E8E0D0]/35 leading-relaxed py-8 text-center">
         暂无该行迹数据
         <br />
         <span className="text-[#E8E0D0]/25">行迹数据集为代表性诗人精选（李白、杜甫、苏轼等 19 位），后续可扩展</span>
@@ -121,7 +121,7 @@ export function JourneyMap({ journey }: JourneyMapProps) {
   const death = journey.stages[journey.stages.length - 1];
 
   return (
-    <div className="space-y-3">
+    <div data-testid="journey-map" className="space-y-3">
       <p className="text-xs text-[#E8E0D0]/45 leading-relaxed">{journey.summary}</p>
 
       <div className="rounded-lg overflow-hidden border border-[#2A2820] bg-[#0c0c14]">

@@ -23,10 +23,11 @@ export const useUIStore = create<UIStore>((set) => ({
   sharePanelOpen: false,
   accessibilityPanelOpen: false,
 
-  toggleSearch: () => set((s) => ({ searchOpen: !s.searchOpen })),
-  toggleDimension: () => set((s) => ({ dimensionPanelOpen: !s.dimensionPanelOpen })),
-  toggleShare: () => set((s) => ({ sharePanelOpen: !s.sharePanelOpen })),
-  toggleAccessibility: () => set((s) => ({ accessibilityPanelOpen: !s.accessibilityPanelOpen })),
+  // 面板互斥：打开任一面板时关闭其余面板，避免多面板叠加遮挡交互
+  toggleSearch: () => set((s) => ({ searchOpen: !s.searchOpen, dimensionPanelOpen: false, sharePanelOpen: false, accessibilityPanelOpen: false })),
+  toggleDimension: () => set((s) => ({ dimensionPanelOpen: !s.dimensionPanelOpen, searchOpen: false, sharePanelOpen: false, accessibilityPanelOpen: false })),
+  toggleShare: () => set((s) => ({ sharePanelOpen: !s.sharePanelOpen, searchOpen: false, dimensionPanelOpen: false, accessibilityPanelOpen: false })),
+  toggleAccessibility: () => set((s) => ({ accessibilityPanelOpen: !s.accessibilityPanelOpen, searchOpen: false, dimensionPanelOpen: false, sharePanelOpen: false })),
   closeAll: () => set({
     searchOpen: false,
     dimensionPanelOpen: false,

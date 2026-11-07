@@ -63,7 +63,7 @@ export function RelationGraph({ entries, poetMap, onFocusPoet }: RelationGraphPr
 
   if (entries.length === 0) {
     return (
-      <div className="text-xs text-[#E8E0D0]/35 leading-relaxed py-8 text-center">
+      <div data-testid="relation-graph-empty" className="text-xs text-[#E8E0D0]/35 leading-relaxed py-8 text-center">
         暂无关系数据
         <br />
         <span className="text-[#E8E0D0]/25">可切换「概览」查看已挖掘的文脉关系</span>
@@ -74,7 +74,7 @@ export function RelationGraph({ entries, poetMap, onFocusPoet }: RelationGraphPr
   const hoveredEntry = hovered ? placed.find((p) => p.otherPoetId === hovered) : null;
 
   return (
-    <div className="space-y-3">
+    <div data-testid="relation-graph" className="space-y-3">
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[#E8E0D0]/55">
         {(Object.keys(CATEGORY_META) as RelationCategory[])
           .filter((c) => (categoryCounts[c] ?? 0) > 0)

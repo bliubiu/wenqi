@@ -41,6 +41,32 @@ describe('uiStore', () => {
     expect(useUIStore.getState().accessibilityPanelOpen).toBe(true);
   });
 
+  it('打开任一面板时应关闭其他面板（互斥）', () => {
+    useUIStore.setState({ sharePanelOpen: true });
+    useUIStore.getState().toggleAccessibility();
+    const state = useUIStore.getState();
+    expect(state.accessibilityPanelOpen).toBe(true);
+    expect(state.sharePanelOpen).toBe(false);
+    expect(state.dimensionPanelOpen).toBe(false);
+    expect(state.searchOpen).toBe(false);
+  });
+
+  it('toggleDimension 应关闭已打开的分享面板', () => {
+    useUIStore.setState({ sharePanelOpen: true });
+    useUIStore.getState().toggleDimension();
+    const state = useUIStore.getState();
+    expect(state.dimensionPanelOpen).toBe(true);
+    expect(state.sharePanelOpen).toBe(false);
+  });
+
+  it('toggleShare 应关闭已打开的维度面板', () => {
+    useUIStore.setState({ dimensionPanelOpen: true });
+    useUIStore.getState().toggleShare();
+    const state = useUIStore.getState();
+    expect(state.sharePanelOpen).toBe(true);
+    expect(state.dimensionPanelOpen).toBe(false);
+  });
+
   it('closeAll 应关闭所有面板', () => {
     useUIStore.setState({ searchOpen: true, dimensionPanelOpen: true, sharePanelOpen: true, accessibilityPanelOpen: true });
     useUIStore.getState().closeAll();

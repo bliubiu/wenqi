@@ -53,10 +53,10 @@ export function DimensionSlider({ onWeightsChange }: DimensionSliderProps) {
   };
 
   return (
-    <div className="hidden sm:block absolute left-4 top-1/2 transform -translate-y-1/2">
+    <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
       <button
         onClick={toggleDimension}
-        className="glass-panel text-white p-2.5 rounded-lg hover:bg-glass-heavy transition-all duration-200 active:scale-95"
+        className="hidden sm:block glass-panel text-white p-2.5 rounded-lg hover:bg-glass-heavy transition-all duration-200 active:scale-95"
         title="维度调节"
         data-nav-trigger="dimension"
       >

@@ -129,6 +129,7 @@ export function ComparePanel({ primary, relations, onClose }: ComparePanelProps)
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center px-3 py-6 pointer-events-none">
       <div
+        data-testid="compare-panel"
         className="pointer-events-auto w-full sm:w-[42rem] max-h-[82vh] overflow-y-auto rounded-2xl border border-[#2A2820] text-[#E8E0D0] shadow-2xl"
         style={{ background: 'rgba(10,10,18,0.94)', backdropFilter: 'blur(16px)' }}
       >

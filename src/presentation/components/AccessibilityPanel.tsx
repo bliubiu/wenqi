@@ -10,10 +10,10 @@ export function AccessibilityPanel() {
   const toggleAccessibility = useUIStore((s) => s.toggleAccessibility);
 
   return (
-    <div className="hidden sm:block absolute bottom-4 left-1/2 transform -translate-x-1/2">
+    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
       <button
         onClick={toggleAccessibility}
-        className="glass-panel text-white p-2.5 rounded-lg hover:bg-glass-heavy transition-all duration-200 active:scale-95"
+        className="hidden sm:block glass-panel text-white p-2.5 rounded-lg hover:bg-glass-heavy transition-all duration-200 active:scale-95"
         title="可访问性设置"
         aria-label="可访问性设置"
         data-nav-trigger="a11y"
@@ -34,7 +34,7 @@ export function AccessibilityPanel() {
       </button>
 
       {accessibilityPanelOpen && (
-        <div className="absolute bottom-14 left-1/2 transform -translate-x-1/2 glass-panel-heavy text-white p-5 w-72 animate-fade-in-scale shadow-xl">
+        <div data-testid="a11y-panel" className="absolute bottom-14 left-1/2 transform -translate-x-1/2 glass-panel-heavy text-white p-5 w-72 animate-fade-in-scale shadow-xl">
           <h3 className="text-title text-white/90 mb-4">可访问性设置</h3>
 
           <div className="mb-4">
