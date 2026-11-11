@@ -4,6 +4,22 @@
 
 ---
 
+## [2026.11.12.0] - 0.5.10
+
+### 🐛 Bug Fixes  问题修复
+
+- 【时间轴】修复回放播放/暂停期间区间统计显示「诗人 NaN · 作品 NaN」：`tick()` 推进的播放头为连续浮点年份，`countTimelineRange` 直接以浮点值计算前缀和数组索引（小数索引取值 `undefined`）导致 NaN；现对索引 `Math.floor` 取整。该缺陷自时间演化上线以来一直存在（用户每次点播放必现），此前因仅断言统计行可见而未被发现
+- 【开发体验】`next.config.js` 新增 `allowedDevOrigins: ['127.0.0.1']`，消除 Playwright e2e 运行时 dev server 的跨域 HMR 警告
+- 【可观测性】`playwright.config.ts` 的 `webServer.stdout` 由 `ignore` 改为 `pipe`，dev server 启动失败时可直接看到 next dev 报错原因（此前一次启动失败因输出被丢弃而无法定位）
+
+### 🧪 Tests  测试
+
+- E2E 覆盖缺口补齐 5 项（`galaxy.spec.ts` / `interactions.spec.ts` 增强）：语义检索（意境词「孤寂」命中带「意境」徽标并 Escape 关闭）、时间轴速度循环（1×→2×→4×→1×）与区间拖拽（统计随动、复位恢复全量）、双诗人对比切换对比对象（选中态断言）、关系图谱 hover 展示证据（类别/赠答原题）并点击跳转聚焦、行迹地图轨迹折线与停靠点渲染断言
+- `TimelineStats` 单元测试新增浮点年份用例（红→绿），全量 51 文件 347 条通过
+- 全量 e2e 回归 5/5 通过（48 秒），报告 `e2e-report/verify-20261112074012.md`
+
+---
+
 ## [2026.11.05.2] - 0.5.9
 
 ### ✨ New Features  新增功能

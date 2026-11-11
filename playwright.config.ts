@@ -40,7 +40,8 @@ export default defineConfig({
     url: BASE_URL,
     reuseExistingServer: true,
     timeout: 300_000,
-    stdout: 'ignore',
+    // 输出并入测试流，webServer 启动失败时可直接看到 next dev 的报错原因
+    stdout: 'pipe',
     stderr: 'pipe',
   },
 });

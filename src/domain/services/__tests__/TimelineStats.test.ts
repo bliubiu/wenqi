@@ -23,6 +23,18 @@ describe('时间轴区间统计', () => {
     expect(countTimelineRange(stats, 712, 712)).toEqual({ poetCount: 2, workCount: 25 });
   });
 
+  it('浮点年份（播放头推进的连续值）应取整统计而非返回 NaN', () => {
+    const stats = buildTimelineStats([
+      { birthYear: 701, workCount: 10 },
+      { birthYear: 712, workCount: 20 },
+      { birthYear: 770, workCount: 3 },
+    ]);
+    // 播放头 tick 推进产生小数年份，前缀和索引必须取整
+    expect(countTimelineRange(stats, 701, 712.5)).toEqual({ poetCount: 2, workCount: 30 });
+    expect(countTimelineRange(stats, 705.3, 711.7)).toEqual({ poetCount: 0, workCount: 0 });
+    expect(countTimelineRange(stats, 700.9, 770.1)).toEqual({ poetCount: 3, workCount: 33 });
+  });
+
   it('区间越界应自动裁剪到统计范围', () => {
     const stats = buildTimelineStats([
       { birthYear: 600, workCount: 1 },

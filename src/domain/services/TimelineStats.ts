@@ -64,8 +64,8 @@ export function countTimelineRange(stats: TimelineStats, fromYear: number, toYea
   const end = Math.min(stats.maxYear, Math.max(fromYear, toYear));
   if (end < start) return { poetCount: 0, workCount: 0 };
 
-  const startIndex = start - stats.minYear;
-  const endIndex = end - stats.minYear + 1;
+  const startIndex = Math.floor(start) - stats.minYear;
+  const endIndex = Math.floor(end) - stats.minYear + 1;
   return {
     poetCount: stats.poetPrefix[endIndex] - stats.poetPrefix[startIndex],
     workCount: stats.workPrefix[endIndex] - stats.workPrefix[startIndex],

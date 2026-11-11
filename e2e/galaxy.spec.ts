@@ -53,6 +53,11 @@ test.describe('星系核心业务闭环', () => {
       await detail.getByRole('button', { name: '行迹' }).click();
       await expect(detail.getByTestId('journey-map')).toBeVisible({ timeout: 30_000 });
       await expect(detail.getByText('出生', { exact: true })).toBeVisible();
+
+      // 行迹轨迹折线与停靠点渲染（李白为精选行迹诗人，必有阶段数据）
+      const map = detail.getByTestId('journey-map');
+      await expect(map.locator('polyline').first()).toBeVisible({ timeout: 30_000 });
+      expect(await map.locator('circle').count()).toBeGreaterThan(0);
     });
 
     await test.step('收藏诗人并在星单中可见', async () => {
@@ -68,6 +73,22 @@ test.describe('星系核心业务闭环', () => {
       await page.getByRole('button', { name: '我的星单' }).click();
       await expect(starList).toBeHidden();
       await detail.getByRole('button', { name: '取消收藏' }).click();
+    });
+
+    await test.step('关系谱证据溯源并点击跳转聚焦', async () => {
+      const detail = page.getByTestId('poet-detail-panel');
+      await detail.getByRole('button', { name: '关系图谱' }).click();
+      const graph = detail.getByTestId('relation-graph');
+      await expect(graph).toBeVisible({ timeout: 30_000 });
+
+      // hover 关联诗人节点：展示关系类别与证据（赠答原题 / 化用片段）
+      const node = graph.locator('g.cursor-pointer').first();
+      await node.hover();
+      await expect(graph.getByText(/【.+】/).first()).toBeVisible({ timeout: 15_000 });
+
+      // 点击跳转：详情面板切换为关联诗人（不再是李白）
+      await node.click();
+      await expect(page.getByTestId('poet-name')).not.toHaveText('李白', { timeout: 30_000 });
     });
 
     await test.step('按 ESC 取消聚焦并关闭详情', async () => {

@@ -15,6 +15,8 @@ function loadAppConfig() {
 
 const nextConfig = {
   output: 'export',
+  // 允许 127.0.0.1 访问开发期资源（Playwright e2e 以 localhost 为 baseURL 时消除跨域警告）
+  allowedDevOrigins: ['127.0.0.1'],
   images: {
     unoptimized: true,
   },

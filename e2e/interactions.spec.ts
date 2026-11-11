@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { gotoGalaxy, openPoetDetail } from './helpers';
+import { gotoGalaxy, openPoetDetail, search } from './helpers';
 
 test.describe('交互与视图业务', () => {
   test('每日一诗、双诗人对比、分享还原、时间轴、维度、地理、无障碍', async ({ page }) => {
@@ -35,6 +35,12 @@ test.describe('交互与视图业务', () => {
       await expect(compare.getByRole('img', { name: '三气雷达对比' })).toBeVisible({ timeout: 30_000 });
       await expect(compare.getByText('关系网叠加')).toBeVisible();
       await expect(compare.getByText(/共同 \d+/)).toBeVisible();
+
+      // 切换对比对象：点下一候选后其变为选中态，雷达保持渲染
+      const nextCandidate = compare.getByRole('button').nth(2);
+      await nextCandidate.click();
+      await expect(nextCandidate).toHaveClass(/bg-\[#B68B5C\]\/10/);
+      await expect(compare.getByRole('img', { name: '三气雷达对比' })).toBeVisible();
 
       await compare.getByRole('button', { name: '关闭对比' }).click();
       await expect(compare).toBeHidden();
@@ -79,14 +85,30 @@ test.describe('交互与视图业务', () => {
       });
     });
 
-    await test.step('时间轴回放：播放、暂停、复位', async () => {
+    await test.step('时间轴回放：播放、暂停、速度循环、区间拖拽、复位', async () => {
+      const statsText = page.getByText(/诗人 .+ · 作品 .+/);
+      const initialStats = await statsText.innerText();
+
       await page.getByRole('button', { name: '播放', exact: true }).click();
       await expect(page.getByRole('button', { name: '暂停', exact: true })).toBeVisible();
       await page.getByRole('button', { name: '暂停', exact: true }).click();
       await expect(page.getByRole('button', { name: '播放', exact: true })).toBeVisible();
-      await expect(page.getByText(/诗人 .+ · 作品 .+/)).toBeVisible();
+      // 播放激活后统计为「区间起点 → 播放头」的增量计数
+      await expect.poll(() => statsText.innerText()).not.toBe(initialStats);
 
+      // 速度循环切换：1× → 2× → 4× → 1×
+      await page.getByRole('button', { name: '1×', exact: true }).click();
+      await expect(page.getByRole('button', { name: '2×', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: '2×', exact: true }).click();
+      await expect(page.getByRole('button', { name: '4×', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: '4×', exact: true }).click();
+      await expect(page.getByRole('button', { name: '1×', exact: true })).toBeVisible();
+
+      // 区间拖拽（起点置 1100）后统计随动，复位恢复全量
+      await page.getByLabel('时间区间起点').fill('1100');
+      await expect.poll(() => statsText.innerText()).not.toBe(initialStats);
       await page.getByRole('button', { name: '复位' }).click();
+      await expect.poll(() => statsText.innerText()).toBe(initialStats);
       await expect(page.getByRole('button', { name: '复位' })).toBeDisabled();
     });
 
@@ -108,6 +130,15 @@ test.describe('交互与视图业务', () => {
       await expect(page.getByText(/籍贯 .*%/)).toBeVisible();
       await page.getByRole('button', { name: '星系', exact: true }).click();
       await expect(page.getByText('未标注籍贯的诗人不参与地图投影')).toBeHidden({ timeout: 30_000 });
+    });
+
+    await test.step('语义检索：意境词命中带「意境」徽标', async () => {
+      await search(page, '孤寂');
+      const semanticHit = page.getByTestId('search-result-item').filter({ hasText: '意境' }).first();
+      await expect(semanticHit).toBeVisible({ timeout: 30_000 });
+
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('search-results')).toBeHidden({ timeout: 15_000 });
     });
 
     await test.step('无障碍设置：字体大小与高对比度', async () => {
